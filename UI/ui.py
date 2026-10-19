@@ -13,8 +13,8 @@ from components import LoadingScreen, HomeScreen
 
 def main(page: ft.Page):
     page.title = "Notifio"
-    page.theme_mode = ft.ThemeMode.LIGHT
-    page.bgcolor = "#FFF9E6"
+    page.theme_mode = ft.ThemeMode.DARK
+    page.bgcolor = "#08090a"
     page.padding = 0
     page.spacing = 0
 
@@ -29,7 +29,7 @@ def main(page: ft.Page):
     page.add(root)
 
     async def boot():
-        await asyncio.sleep(2.0)
+        await asyncio.sleep(3.0)
         root.content = HomeScreen(on_enter=lambda: None)
         page.update()
 

@@ -1,14 +1,8 @@
 import flet as ft
 from pathlib import Path
 
-GRADIENT = ft.LinearGradient(
-    begin=ft.Alignment(-1, 0),
-    end=ft.Alignment(1, 0),
-    colors=["#FFF9E6", "#FFF38A"],
-    stops=[0.0, 1.0],
-)
-
-ASSET_PATH = Path(__file__).resolve().parents[2] / "Assets" / "SCR-20261019-ffwr.png"
+BG = "#08090a"
+ASSET_PATH = Path(__file__).resolve().parents[2] / "Assets" / "Ferdium_1024x1024x32-recolored.png"
 
 
 class LoadingScreen(ft.Container):
@@ -19,8 +13,8 @@ class LoadingScreen(ft.Container):
                     controls=[
                         ft.Image(
                             src=str(ASSET_PATH),
-                            width=40,
-                            height=40,
+                            width=100,
+                            height=100,
                             border_radius=10,
                         ),
                         ft.Container(height=12),
@@ -33,6 +27,6 @@ class LoadingScreen(ft.Container):
                 alignment=ft.Alignment(0, 0),
                 expand=True,
             ),
-            gradient=GRADIENT,
+            bgcolor=BG,
             expand=True,
         )
