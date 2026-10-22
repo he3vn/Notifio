@@ -1,5 +1,12 @@
 import flet as ft
 
+# Typography System (Matching Linear Desktop)
+FONT_FAMILY = "Inter"
+FONT_REGULAR = "Inter"
+FONT_MEDIUM = "Inter-Medium"
+FONT_SEMIBOLD = "Inter-SemiBold"
+FONT_BOLD = "Inter-Bold"
+
 # Linear Dark Color System
 BG_APP = "#090a0d"           # Main app canvas
 BG_SIDEBAR = "#0d0e12"       # Navigation sidebar

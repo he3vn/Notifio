@@ -1,12 +1,11 @@
 import flet as ft
 
-BG = "#08090a"
-
 
 class HomeScreen(ft.Container):
-    def __init__(self, on_enter=None):
+    """Clean black screen displayed after setup."""
+
+    def __init__(self, name=""):
         super().__init__(
-            bgcolor=BG,
-            expand=True,
-            on_click=lambda e: on_enter() if on_enter else None,
+            bgcolor="#08090a", expand=True, alignment=ft.Alignment(0, 0),
+            content=ft.Text("Notifio", size=20, color="#62666d", font_family="Inter-SemiBold", weight=ft.FontWeight.W_600),
         )
