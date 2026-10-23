@@ -18,9 +18,9 @@ class SetupWizard(ft.Container):
 
     def __init__(self, on_finish=None):
         super().__init__(expand=True, bgcolor=BG)
-        self.on_finish, self.step, self.data = on_finish, 0, {"use_case": "Streaming"}
+        self.on_finish, self.step, self.data = on_finish, 0, {"use_case": "Follow creators"}
         self.page_getstarted = Getstarted(lambda v: self.data.update({"use_case": v}))
-        self.pages = [self.page_getstarted, Plugins(), AllSet()]
+        self.pages = [self.page_getstarted, Plugins(self.data), AllSet()]
         self.form = ft.Container(content=self.pages[0])
         self.dots = ft.Row(spacing=6, alignment=ft.MainAxisAlignment.CENTER)
         self.hero = ft.Image(src=PAGE_IMAGES[0], fit=ft.BoxFit.COVER, opacity=0.35)
@@ -51,6 +51,8 @@ class SetupWizard(ft.Container):
     def _next(self, e):
         if self.step < len(self.pages) - 1:
             self.step += 1; self._sync()
+            if self.step==1:
+                self.pages[1].refresh()
             try: self.page.update()
             except Exception: pass
 
