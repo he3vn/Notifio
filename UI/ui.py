@@ -36,14 +36,24 @@ async def main(page: ft.Page):
     root = ft.Container(content=LoadingScreen(), expand=True)
     page.add(root)
 
-    def finish_setup(data: dict):
-        save_user(data)
-        root.content = HomeScreen(name=data.get("name", ""))
+    async def show_setup():
+        root.content=LoadingScreen()
+        page.update()
+        await asyncio.sleep(2.5)
+        root.content=SetupWizard(on_finish=finish_setup)
         page.update()
 
-    await asyncio.sleep(2.5)
-    root.content = SetupWizard(on_finish=finish_setup)
-    page.update()
+    def finish_setup(data: dict):
+        save_user(data)
+        root.content = HomeScreen(
+            name=data.get("name",""),
+            on_settings=lambda: page.run_task(show_setup),
+        )
+        page.update()
+
+    await show_setup()
+
+
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ class Getstarted(ft.Container):
 
         self.content = ft.Column(spacing=0, controls=[
             ft.Text("Set up your profile", size=22, color=H, font_family="Inter-SemiBold", weight=ft.FontWeight.W_600),
-            ft.Text("Choose how you'll appear in Notifio", size=13, color=S),
+            ft.Text("Choose how you will appear in Notifio", size=13, color=S),
             ft.Container(height=24),
             ft.Text("Name & picture", size=12, color=S, font_family="Inter-Medium"),
             ft.Container(height=4),

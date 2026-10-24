@@ -14,7 +14,7 @@ PAGE_IMAGES = [
 
 
 class SetupWizard(ft.Container):
-    """Split-screen setup: left form, right hero image, bottom dots + nav."""
+    #Here ima js make the split screen sh and use getstarted for the rest of the logic yes ima use claude to fill in some of the logic here
 
     def __init__(self, on_finish=None):
         super().__init__(expand=True, bgcolor=BG)
@@ -46,7 +46,7 @@ class SetupWizard(ft.Container):
         self.dots.controls = [ft.Container(width=22 if i == self.step else 6, height=6, border_radius=3,
             bgcolor="#f7f8f8" if i == self.step else "#34343a") for i in range(len(self.pages))]
         self.btn_back.visible = self.step > 0
-        self.btn_next.text = "Finish" if self.step == len(self.pages) - 1 else "Continue"
+        self.btn_next.content = "Finish" if self.step == len(self.pages) - 1 else "Continue"
 
     def _next(self, e):
         if self.step < len(self.pages) - 1:
@@ -55,6 +55,9 @@ class SetupWizard(ft.Container):
                 self.pages[1].refresh()
             try: self.page.update()
             except Exception: pass
+        elif self.on_finish:
+            self.data["name"]= self.page_getstarted.name_field.value
+            self.on_finish(self.data)
 
     def _prev(self, e):
         if self.step > 0:
