@@ -6,38 +6,41 @@ import flet as ft
 UI_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = UI_DIR.parent
 ASSETS_DIR = PROJECT_DIR / "Assets"
-SETUP_FILE = PROJECT_DIR / "user_setup.json"
-
-def load_setup():
-    try:
-        saved = json.loads(SETUP_FILE.read_text())
-        return saved if isinstance(saved,dict) and saved.get("setup_done") else None
-    except Exception:
-        return None
-
-def mark_setup_done(data:dict):
-    try:
-        SETUP_FILE.write_text(json.dumps({**data, "setup_done": True}))
-    except Exception:
-        pass
-
-def mark_setup_pending():
-    try:
-        saved = json.loads(SETUP_FILE.read_text())
-        if not isinstance(saved,dict):
-            saved={}
-    except Exception:
-        saved={}
-    try:
-        SETUP_FILE.write_text(json.dumps({**saved, "setup_done": False}))
-    except Exception:
-        pass
 
 if str(UI_DIR) not in sys.path:
     sys.path.insert(0, str(UI_DIR))
 
 from components import LoadingScreen, HomeScreen, SetupWizard
-from storage import save_user
+from storage import save_user, get_data_dir
+
+SETUP_FILE = get_data_dir() / "user_setup.json"
+
+
+def load_setup():
+    for f in [SETUP_FILE, PROJECT_DIR / "user_setup.json"]:
+        try:
+            if f.exists():
+                saved = json.loads(f.read_text())
+                if isinstance(saved, dict) and saved.get("setup_done"):
+                    return saved
+        except Exception:
+            pass
+    return None
+
+
+def mark_setup_done(data: dict):
+    try:
+        SETUP_FILE.write_text(json.dumps({**data, "setup_done": True}))
+    except Exception:
+        pass
+
+
+def mark_setup_pending():
+    saved = load_setup() or {}
+    try:
+        SETUP_FILE.write_text(json.dumps({**saved, "setup_done": False}))
+    except Exception:
+        pass
 
 
 async def main(page: ft.Page):

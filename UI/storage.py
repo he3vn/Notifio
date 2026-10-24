@@ -1,7 +1,14 @@
 import json, os
 from pathlib import Path
 
-FILE = Path(os.getenv("FLET_APP_STORAGE_DATA", Path(__file__).resolve().parent)) / "user.json"
+
+def get_data_dir() -> Path:
+    p = Path(os.getenv("FLET_APP_STORAGE_DATA", Path.home() / ".notifio"))
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+FILE = get_data_dir() / "user.json"
 
 
 def save_user(data: dict):

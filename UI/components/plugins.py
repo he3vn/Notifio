@@ -1,9 +1,11 @@
 import json
 import flet as ft
 from pathlib import Path
+from storage import get_data_dir
 
 LOGOS = Path(__file__).resolve().parents[2] / "Assets" / "logos"
-SAVE_FILE = Path(__file__).resolve().parents[2] / "selected_plugins.json"
+SAVE_FILE = get_data_dir() / "selected_plugins.json"
+DEV_FILE = Path(__file__).resolve().parents[2] / "selected_plugins.json"
 
 NORMAL = "#3a3d44"
 SELECTED = "#5e6ad2"
@@ -101,7 +103,10 @@ class Plugins(ft.Container):
         try:
             SAVE_FILE.write_text(json.dumps(self.data["plugins"]))
         except Exception:
-            pass
+            try:
+                DEV_FILE.write_text(json.dumps(self.data["plugins"]))
+            except Exception:
+                pass
 
     def refresh(self):
         use = self.data["use_case"]
