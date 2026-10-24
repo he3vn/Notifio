@@ -1,10 +1,37 @@
-import asyncio, sys
+import asyncio, sys, json
 from pathlib import Path
 import flet as ft
+
 
 UI_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = UI_DIR.parent
 ASSETS_DIR = PROJECT_DIR / "Assets"
+SETUP_FILE = PROJECT_DIR / "user_setup.json"
+
+def load_setup():
+    try:
+        saved = json.loads(SETUP_FILE.read_text())
+        return saved if isinstance(saved,dict) and saved.get("setup_done") else None
+    except Exception:
+        return None
+
+def mark_setup_done(data:dict):
+    try:
+        SETUP_FILE.write_text(json.dumps({**data, "setup_done": True}))
+    except Exception:
+        pass
+
+def mark_setup_pending():
+    try:
+        saved = json.loads(SETUP_FILE.read_text())
+        if not isinstance(saved,dict):
+            saved={}
+    except Exception:
+        saved={}
+    try:
+        SETUP_FILE.write_text(json.dumps({**saved, "setup_done": False}))
+    except Exception:
+        pass
 
 if str(UI_DIR) not in sys.path:
     sys.path.insert(0, str(UI_DIR))
@@ -36,25 +63,36 @@ async def main(page: ft.Page):
     root = ft.Container(content=LoadingScreen(), expand=True)
     page.add(root)
 
-    async def show_setup():
-        root.content=LoadingScreen()
-        page.update()
-        await asyncio.sleep(2.5)
-        root.content=SetupWizard(on_finish=finish_setup)
+    def redo_setup():
+        mark_setup_pending()
+        page.run_task(show_setup)
+        
+    def open_home(data: dict):
+        root.content = HomeScreen(
+            plugins=data.get("plugins", []),
+            name=data.get("name", ""),
+            on_settings=redo_setup,
+        )
         page.update()
 
     def finish_setup(data: dict):
         save_user(data)
-        root.content = HomeScreen(
-            name=data.get("name",""),
-            on_settings=lambda: page.run_task(show_setup),
-        )
+        mark_setup_done(data)
+        open_home(data)
+
+    async def show_setup():
+        root.content = LoadingScreen()
+        page.update()
+        await asyncio.sleep(1.5)
+        root.content = SetupWizard(on_finish=finish_setup)
         page.update()
 
-    await show_setup()
-
-
-
+    saved = load_setup()
+    if saved:
+        await asyncio.sleep(0.5)
+        open_home(saved)
+    else:
+        await show_setup()
 
 if __name__ == "__main__":
     if hasattr(ft, "run"):
