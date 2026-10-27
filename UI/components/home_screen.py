@@ -39,7 +39,7 @@ class HomeScreen(ft.Container):
         main_area = ft.Stack(expand=True, controls=[
             ft.Container(
                 expand=True, alignment=ft.Alignment(0, 0),
-                content=ft.Text("", size=20, color="#62666d", font_family="Inter-SemiBold", weight=ft.FontWeight.W_600),
+                
             ),
             ft.IconButton(
                 icon=ft.Icons.SETTINGS_OUTLINED, icon_color="#8a8f98", icon_size=20,
@@ -87,3 +87,4 @@ class HomeScreen(ft.Container):
     def _open_settings(self, e):
         if self.on_settings:
             self.on_settings()
+            
