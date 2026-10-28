@@ -1,51 +1,68 @@
 # Notifio
 
-Notifio is a notification center for macOS. It pulls together notifications from apps like Discord, Slack, Gmail, GitHub, and others into one clean window so you don't have to keep switching between tabs or apps to check what you missed.
+A lightweight desktop notification center that aggregates news and updates from your favorite sources into one clean, dark-themed window. No more switching between tabs to check what you missed.
 
-Built with Python and Flet.
+Built with Python and [Flet](https://flet.dev). Currently supports **news feeds via RSS** (powered by [Dexerto](https://www.dexerto.com)), with more plugin sources planned.
+
+![Notifio news feed](Assets/screenshot-news.png)
 
 ---
 
-## How to run it
+## Download
 
-You'll need Python 3.10 or newer installed on your Mac.
+Grab the latest build from the [Releases page](https://github.com/he3vn/Notifio/releases) — no Python install required:
 
-1. Clone the repo:
+| Platform | Download |
+|----------|----------|
+| macOS | [Notifio-macOS.zip](https://github.com/he3vn/Notifio/releases/latest/download/Notifio-macOS.zip) |
+| Windows | [Notifio-Windows.zip](https://github.com/he3vn/Notifio/releases/latest/download/Notifio-Windows.zip) |
+| Linux | [Notifio-Linux.tar.gz](https://github.com/he3vn/Notifio/releases/latest/download/Notifio-Linux.tar.gz) |
 
-```
+> On macOS you may need to right-click → Open the first time to bypass Gatekeeper.
+
+---
+
+## What it does
+
+- **Setup wizard** — pick your name and choose which plugins to enable  
+- **News plugin** — fetches the latest articles from Dexerto's RSS feed automatically every 5 minutes  
+- **Desktop notifications** — get a native notification with sound when new articles drop  
+- **Notification center** — browse, click to read, and dismiss articles from the sidebar  
+- **Clear & refresh** — manually refresh the feed or clear all notifications with one click  
+
+---
+
+## Running from source
+
+You'll need Python 3.10+ installed.
+
+```bash
 git clone https://github.com/he3vn/Notifio.git
 cd Notifio
-```
-
-2. Install the dependencies:
-
-```
 pip install -r requirements.txt
-```
-
-3. Run the app:
-
-```
 python3 main.py
 ```
 
-On first launch you'll go through a short setup where you pick your name and choose which notification sources (plugins) you want enabled. After that it drops you straight into the main dashboard.
+On first launch you'll go through a short setup where you pick your name and choose which plugins to enable. After that it drops you into the notification center.
 
 ---
 
 ## Building a standalone app
 
-If you want to package Notifio into a proper .app you can double-click and share with others, run the build script:
-
-```
+```bash
 python3 build.py
 ```
 
-This will create a `dist/` folder with:
-- `Notifio.app` - the standalone Mac app with the custom icon baked in
-- `Notifio-macOS.zip` - a zipped version ready to upload to GitHub Releases or send to someone
+This creates a `dist/` folder with:
+- **macOS** — `Notifio.app` + `Notifio-macOS.zip`
+- **Windows** — `Notifio.exe` + `Notifio-Windows.zip`
+- **Linux** — `Notifio` binary + `Notifio-Linux.tar.gz`
 
-On Windows it produces an `.exe` and on Linux a standalone binary, same idea.
+---
+
+## Roadmap
+
+Plugins on the sidebar that aren't wired up yet (Twitch, Rumble, YouTube, X, Patreon, Slack, Facebook) are planned for future updates. The plugin architecture is already in place — each source just needs a feed fetcher.
 
 ---
 

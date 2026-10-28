@@ -1,23 +1,24 @@
 import threading
+import traceback
 import notifications
 import notifier
-import traceback
 from dexerto.feeds import FEEDS, fetch_all
 
 INTERVAL = 300
-MAX_INDIVIDUAL= 3
+MAX_INDIVIDUAL = 3
+
 
 class Poller:
 
-    def __init__(self, plugins,on_update=None,interval=INTERVAL):
-        self.plugins= [p for p in plugins if p in FEEDS]
-        self.on_update=on_update
-        self.interval=interval
-        self._stop= threading.Event()
-        self._wake=threading.Event()
+    def __init__(self, plugins, on_update=None, interval=INTERVAL):
+        self.plugins = [p for p in plugins if p in FEEDS]
+        self.on_update = on_update
+        self.interval = interval
+        self._stop = threading.Event()
+        self._wake = threading.Event()
 
     def start(self):
-        threading.Thread(target=self._loop,daemon=True).start()
+        threading.Thread(target=self._loop, daemon=True).start()
 
     def stop(self):
         self._stop.set()
@@ -44,6 +45,7 @@ class Poller:
             try:
                 new = notifications.add_new(name, fetch_all(FEEDS[name]))
             except Exception:
+                traceback.print_exc()
                 failed = True
                 continue
             added += new
@@ -56,11 +58,11 @@ class Poller:
         if self.on_update:
             self.on_update(added, failed)
 
-    def _ping(self,items):
+    def _ping(self, items):
         if not items:
             return
-        if len(items)>MAX_INDIVIDUAL:
-            notifier.send("Notifio",f"{len(items)} new notifications")
+        if len(items) > MAX_INDIVIDUAL:
+            notifier.send("Notifio", f"{len(items)} new notifications")
             return
         for i in reversed(items):
             notifier.send(i["source"], i["title"], i["link"])
