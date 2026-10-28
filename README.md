@@ -1,6 +1,14 @@
-# Notifio
+<p align="center">
+  <img src="Assets/Ferdium_1024x1024x32-recolored.png" width="100" alt="Notifio logo" />
+</p>
 
-A lightweight desktop notification center that aggregates news and updates from your favorite sources into one clean, dark-themed window. No more switching between tabs to check what you missed.
+<h1 align="center">Notifio</h1>
+
+<p align="center">
+  A lightweight desktop notification center that pulls news and updates into one clean window.
+</p>
+
+---
 
 Built with Python and [Flet](https://flet.dev). Currently supports **news feeds via RSS** (powered by [Dexerto](https://www.dexerto.com)), with more plugin sources planned.
 
