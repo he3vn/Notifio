@@ -6,12 +6,15 @@ import flet as ft
 UI_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = UI_DIR.parent
 ASSETS_DIR = PROJECT_DIR / "Assets"
+BACKEND_DIR = PROJECT_DIR / "Backend"
 
-if str(UI_DIR) not in sys.path:
-    sys.path.insert(0, str(UI_DIR))
+for d in (UI_DIR, BACKEND_DIR):
+    if str(d) not in sys.path:
+        sys.path.insert(0, str(d))
 
 from components import LoadingScreen, HomeScreen, SetupWizard
 from storage import save_user, get_data_dir
+from poller import Poller
 
 SETUP_FILE = get_data_dir() / "user_setup.json"
 
@@ -66,17 +69,32 @@ async def main(page: ft.Page):
     root = ft.Container(content=LoadingScreen(), expand=True)
     page.add(root)
 
+    poller_ref = {"p": None}
+
+    def stop_poller():
+        if poller_ref["p"]:
+            poller_ref["p"].stop()
+            poller_ref["p"] = None
+
     def redo_setup():
+        stop_poller()
         mark_setup_pending()
         page.run_task(show_setup)
-        
+
     def open_home(data: dict):
-        root.content = HomeScreen(
+        stop_poller()
+        home = HomeScreen(
             plugins=data.get("plugins", []),
             name=data.get("name", ""),
             on_settings=redo_setup,
         )
+        root.content = home
         page.update()
+
+        poller = Poller(plugins=data.get("plugins", []), on_update=home.on_poll)
+        home.on_refresh = poller.poll_now
+        poller.start()
+        poller_ref["p"] = poller
 
     def finish_setup(data: dict):
         save_user(data)

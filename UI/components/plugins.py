@@ -16,6 +16,7 @@ TOP = [
     ("Youtube", "youtube.png"),
     ("X", "x.png"),
 ]
+
 BOTTOM = [
     ("News", "news.png"),
     ("Patreon", "patreon.png"),
@@ -25,17 +26,16 @@ BOTTOM = [
 
 
 class Plugins(ft.Container):
-
     def __init__(self, data):
         super().__init__()
         self.data = data
         self.boxes = {}        # name -> box control
         self.applied = None    # which use case we last pre-selected for
         self.data.setdefault("plugins", [])
-
+        
         self.top_boxes = [self._box(*p) for p in TOP]
         self.bottom_boxes = [self._box(*p) for p in BOTTOM]
-
+        
         self.content = ft.Column(
             spacing=4,
             horizontal_alignment=ft.CrossAxisAlignment.START,
@@ -89,8 +89,10 @@ class Plugins(ft.Container):
             chosen.append(name)
         self._restyle()
         self._save()
-        try: self.update()
-        except Exception: pass
+        try: 
+            self.update()
+        except Exception: 
+            pass
 
     def _restyle(self):
         for name, box in self.boxes.items():
@@ -109,10 +111,17 @@ class Plugins(ft.Container):
                 pass
 
     def refresh(self):
-        use = self.data["use_case"]
+        use = self.data.get("use_case", "Follow creators")
         if use != self.applied:          # only pre-select when the category changed
             row = TOP if use == "Follow creators" else BOTTOM
-            self.data["plugins"][:] = [name for name, _ in row]
+            names = [name for name, _ in row]
+            
+           
+            self.data["plugins"][:] = names
             self.applied = use
             self._restyle()
             self._save()
+            try:
+                self.update()
+            except Exception:
+                pass

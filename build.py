@@ -25,6 +25,12 @@ def build():
         "-i", str(icon_path),
         "--add-data", f"Assets{sep}Assets",
         "--add-data", f"UI{sep}UI",
+        "--add-data", f"Backend{sep}Backend",
+        "--hidden-import", "dexerto.feeds",
+        "--hidden-import", "notifications",
+        "--hidden-import", "notifier",
+        "--hidden-import", "poller",
+        "--hidden-import", "certifi",
         "-y"
     ]
 

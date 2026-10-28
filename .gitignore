@@ -2,6 +2,15 @@
 __pycache__/
 *.py[cod]
 *$py.class
+notifications.json
+seen.json
+user.json
+user_setup.json
+selected_plugins.json
+__pycache__/
+build/
+dist/
+.vscode/
 
 # C extensions
 *.so
