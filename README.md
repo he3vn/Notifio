@@ -23,10 +23,10 @@ Grab the latest build from the [Releases page](https://github.com/he3vn/Notifio/
 | Platform | Download |
 |----------|----------|
 | macOS | [Notifio-macOS.zip](https://github.com/he3vn/Notifio/releases/latest/download/Notifio-macOS.zip) |
-| Windows | [Notifio-Windows.zip](https://github.com/he3vn/Notifio/releases/latest/download/Notifio-Windows.zip) |
-| Linux | [Notifio-Linux.tar.gz](https://github.com/he3vn/Notifio/releases/latest/download/Notifio-Linux.tar.gz) |
 
-> On macOS you may need to right-click → Open the first time to bypass Gatekeeper.
+> You may need to right-click → Open the first time to bypass Gatekeeper.
+
+> **Note:** Notifio is built for macOS. The UI runs on any platform, but desktop notifications and some features rely on macOS-specific APIs.
 
 ---
 
