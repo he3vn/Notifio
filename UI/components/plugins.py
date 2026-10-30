@@ -13,15 +13,11 @@ SELECTED = "#5e6ad2"
 TOP = [
     ("Twitch", "twitch.png"),
     ("Rumble", "rumble.png"),
-    ("Youtube", "youtube.png"),
-    ("X", "x.png"),
 ]
 
 BOTTOM = [
+    ("Youtube", "youtube.png"),
     ("News", "news.png"),
-    ("Patreon", "patreon.png"),
-    ("Slack", "slack.png"),
-    ("Facebook", "facebook.png"),
 ]
 
 
@@ -29,52 +25,54 @@ class Plugins(ft.Container):
     def __init__(self, data):
         super().__init__()
         self.data = data
-        self.boxes = {}        # name -> box control
-        self.applied = None    # which use case we last pre-selected for
+        self.boxes = {}
+        self.applied = None
         self.data.setdefault("plugins", [])
-        
+
         self.top_boxes = [self._box(*p) for p in TOP]
         self.bottom_boxes = [self._box(*p) for p in BOTTOM]
-        
+
         self.content = ft.Column(
             spacing=4,
             horizontal_alignment=ft.CrossAxisAlignment.START,
             controls=[
                 ft.Text("Configure your plugins", size=22, color="#f7f8f8", font_family="Inter-SemiBold", weight=ft.FontWeight.W_600),
                 ft.Text("Select and organize the plugins you want to enable", size=13, color="#8a8f98"),
-                ft.Container(height=50),
-                ft.Text("Recommended", size=22, color="#f7f8f8", font_family="Inter-SemiBold", weight=ft.FontWeight.W_600),
-                ft.Container(height=24),
-                ft.Row(controls=self.top_boxes, spacing=10),
-                ft.Container(height=10),
-                ft.Row(controls=self.bottom_boxes, spacing=10),
+                ft.Container(height=40),
+                ft.Text("Streaming", size=14, color="#8a8f98", font_family="Inter-Medium"),
+                ft.Container(height=12),
+                ft.Row(controls=self.top_boxes, spacing=16),
+                ft.Container(height=20),
+                ft.Text("Content", size=14, color="#8a8f98", font_family="Inter-Medium"),
+                ft.Container(height=12),
+                ft.Row(controls=self.bottom_boxes, spacing=16),
             ],
         )
 
     def _logo(self, filename, name):
         path = LOGOS / filename
         if path.exists():
-            return ft.Image(src=str(path), width=40, height=40, fit=ft.BoxFit.CONTAIN)
+            return ft.Image(src=str(path), width=48, height=48, fit=ft.BoxFit.CONTAIN)
         return ft.Container(
-            width=40, height=40, alignment=ft.Alignment(0, 0),
-            content=ft.Text(name[0], size=28, color="#8a8f98", font_family="Inter-Bold", weight=ft.FontWeight.W_700),
+            width=48, height=48, alignment=ft.Alignment(0, 0),
+            content=ft.Text(name[0], size=32, color="#8a8f98", font_family="Inter-Bold", weight=ft.FontWeight.W_700),
         )
 
     def _box(self, name, filename):
         box = ft.Container(
-            width=90,
-            height=130,
+            width=140,
+            height=150,
             bgcolor="#26282c",
-            border_radius=12,
+            border_radius=14,
             border=ft.Border.all(1, NORMAL),
             on_click=lambda e: self._toggle(name),
             content=ft.Column(
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=10,
+                spacing=12,
                 controls=[
                     self._logo(filename, name),
-                    ft.Text(name, size=12, color="#f7f8f8", font_family="Inter-Medium"),
+                    ft.Text(name, size=14, color="#f7f8f8", font_family="Inter-Medium"),
                 ],
             ),
         )
@@ -89,9 +87,9 @@ class Plugins(ft.Container):
             chosen.append(name)
         self._restyle()
         self._save()
-        try: 
+        try:
             self.update()
-        except Exception: 
+        except Exception:
             pass
 
     def _restyle(self):
@@ -112,11 +110,10 @@ class Plugins(ft.Container):
 
     def refresh(self):
         use = self.data.get("use_case", "Follow creators")
-        if use != self.applied:          # only pre-select when the category changed
+        if use != self.applied:
             row = TOP if use == "Follow creators" else BOTTOM
             names = [name for name, _ in row]
-            
-           
+
             self.data["plugins"][:] = names
             self.applied = use
             self._restyle()

@@ -63,8 +63,6 @@ python3 build.py
 
 This creates a `dist/` folder with:
 - **macOS** — `Notifio.app` + `Notifio-macOS.zip`
-- **Windows** — `Notifio.exe` + `Notifio-Windows.zip`
-- **Linux** — `Notifio` binary + `Notifio-Linux.tar.gz`
 
 ---
 

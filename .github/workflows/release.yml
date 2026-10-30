@@ -11,12 +11,8 @@ permissions:
 
 jobs:
   build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+    name: Build (macOS)
+    runs-on: macos-latest
 
     steps:
       - name: Checkout Code
@@ -39,11 +35,8 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: notifio-${{ matrix.os }}
-          path: |
-            dist/Notifio-macOS.zip
-            dist/Notifio-Windows.zip
-            dist/Notifio-Linux.tar.gz
+          name: notifio-macos
+          path: dist/Notifio-macOS.zip
           if-no-files-found: ignore
 
   release:

@@ -1,5 +1,5 @@
+import asyncio, subprocess, sys
 import flet as ft
-import subprocess, threading
 
 H, S, F, A, B, V = "#f7f8f8", "#8a8f98", "#141516", "#171822", "#23252a", "#5e6ad2"
 
@@ -8,11 +8,12 @@ RECOMMENDED = "Follow creators"
 
 
 class Getstarted(ft.Container):
-   
+
 
     def __init__(self, on_select=None):
         super().__init__()
         self.on_select, self.selected = on_select, OPTIONS[0]
+        self.avatar_path = None
         self.avatar = ft.Container(
             width=38, height=38, border_radius=19, bgcolor=F,
             border=ft.Border.all(1, B), alignment=ft.Alignment(0, 0),
@@ -83,14 +84,23 @@ class Getstarted(ft.Container):
         except Exception: pass
         if self.on_select: self.on_select(self.selected)
 
-    def _pick(self, e):
-        def _run():
-            r = subprocess.run(
-                ["osascript", "-e", 'POSIX path of (choose file of type {"public.image"} with prompt "Select Picture")'],
-                capture_output=True, text=True)
-            path = r.stdout.strip()
-            if path:
-                self.avatar.content = ft.Image(src=path, width=38, height=38, fit=ft.BoxFit.COVER, border_radius=19)
-                try: self.avatar.update()
-                except Exception: pass
-        threading.Thread(target=_run, daemon=True).start()
+    def _pick_macos(self):
+        r = subprocess.run(
+            ["osascript", "-e", 'POSIX path of (choose file of type {"public.image"} with prompt "Select Picture")'],
+            capture_output=True, text=True)
+        return r.stdout.strip()
+
+    async def _pick(self, e):
+        path = None
+        try:
+            files = await ft.FilePicker().pick_files(file_type=ft.FilePickerFileType.IMAGE, allow_multiple=False)
+            if files:
+                path = files[0].path
+        except Exception:
+            if sys.platform == "darwin":
+                path = await asyncio.to_thread(self._pick_macos)
+        if path:
+            self.avatar_path = path
+            self.avatar.content = ft.Image(src=path, width=38, height=38, fit=ft.BoxFit.COVER, border_radius=19)
+            try: self.avatar.update()
+            except Exception: pass

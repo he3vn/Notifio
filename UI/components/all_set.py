@@ -5,7 +5,6 @@ DONATIONS = Path(__file__).resolve().parents[2] / "Assets" / "donations"
 
 
 class AllSet(ft.Container):
-    """Page 3: All set + donation."""
 
     def __init__(self):
         super().__init__()
@@ -23,8 +22,8 @@ class AllSet(ft.Container):
                         alignment=ft.MainAxisAlignment.CENTER,
                         spacing=12,
                         controls=[
-                            ft.Image(src=str(DONATIONS / "bitcoin.png"), width=320, height=320),
-                            ft.Image(src=str(DONATIONS / "solana.png"), width=320, height=320),
+                            ft.Image(src=str(DONATIONS / "bitcoin.png"), width=170, height=170),
+                            ft.Image(src=str(DONATIONS / "solana.png"), width=170, height=170),
                         ],
                     ),
                 ],

@@ -55,6 +55,7 @@ class SetupWizard(ft.Container):
             except Exception: pass
         elif self.on_finish:
             self.data["name"]= self.page_getstarted.name_field.value
+            self.data["avatar"]=self.page_getstarted.avatar_path
             self.on_finish(self.data)
 
     def _prev(self, e):

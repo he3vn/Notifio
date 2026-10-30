@@ -7,6 +7,8 @@ seen.json
 user.json
 user_setup.json
 selected_plugins.json
+youtube_channels.json
+youtube_prefs.json
 __pycache__/
 build/
 dist/
