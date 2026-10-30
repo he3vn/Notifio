@@ -36,6 +36,7 @@ Grab the latest build from the [Releases page](https://github.com/he3vn/Notifio/
 - **News plugin** — fetches the latest articles from Dexerto's RSS feed automatically every 5 minutes  
 - **Desktop notifications** — get a native notification with sound when new articles drop  
 - **Notification center** — browse, click to read, and dismiss articles from the sidebar  
+- **Youtube and twitch plugin** — get a notification when your favorite streamer posts a video short or goes live on both twitch and youtube
 - **Clear & refresh** — manually refresh the feed or clear all notifications with one click  
 
 ---
