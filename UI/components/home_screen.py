@@ -6,10 +6,11 @@ from dexerto.feeds import FEEDS, ago
 from .plugins import TOP, BOTTOM
 from youtube import feeds as yt
 from twitch import feeds as tw
+from rumble import feeds as rb
 
 LOGOS = Path(__file__).resolve().parents[2] / "Assets" / "logos"
 FILES = dict(TOP + BOTTOM)
-AVAILABLE = set(FEEDS) | {"Youtube", "Twitch"}
+AVAILABLE = set(FEEDS) | {"Youtube", "Twitch","Rumble"}
 KIND_LABEL = {"video": "Video", "short": "Short", "live": "LIVE", "upcoming": "Upcoming"}
 SELECTED_BG = "#2b2d31"
 HOVER_BG = "#1c1d21"
@@ -52,6 +53,11 @@ class HomeScreen(ft.Container):
             text_style=ft.TextStyle(size=13, color=H), on_submit=self._add_twitch,
         )
         self.tw_msg = ft.Text("", size=12, color=S)
+        self.rb_input=ft.TextField(
+            hint_text="channel name or rumble URL",dense=True,width=320,
+            text_style=ft.TextStyle(size=13,color=H),on_submit=self._add_rumble,
+        )
+        self.rb_msg=ft.Text("",size=12,color=S)
         self.body = ft.Column(expand=True, spacing=8, scroll=ft.ScrollMode.AUTO)
         main_area = ft.Stack(expand=True, controls=[
             ft.Container(
@@ -213,6 +219,11 @@ class HomeScreen(ft.Container):
         if self.selected == "Twitch":
             self._render_twitch()
             return
+        if self.selected=="Rumble":
+            self._render_rumble()
+            return
+        self.status.value=self.last_status
+
         self.status.value = self.last_status
         items = [i for i in notifications.load() if i.get("plugin") == self.selected][:MAX_SHOWN]
         if items:
@@ -410,3 +421,55 @@ class HomeScreen(ft.Container):
         self._render()
         try: self.update()
         except Exception: pass
+
+    def _render_rumble(self):
+        self.status.value = self.last_status
+        chips = [
+            ft.Container(
+                padding=ft.Padding(10, 2, 2, 2), border_radius=14, bgcolor="#141516",
+                content=ft.Row(tight=True, spacing=4, controls=[
+                    ft.Text(ch["name"], size=12, color=H, font_family="Inter-Medium"),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_size=12, icon_color=S, width=24, height=24,
+                                  on_click=lambda e, ch=ch: self._remove_rumble(ch)),
+                ]),
+            )
+            for ch in rb.load_channels()
+        ]
+        items = [i for i in notifications.load() if i.get("plugin") == "Rumble"][:MAX_SHOWN]
+        self.body.controls = [
+            ft.Row([self.rb_input, ft.Button("Add", on_click=self._add_rumble, height=36)], spacing=8),
+            self.rb_msg,
+            ft.Row(chips, wrap=True, spacing=6, run_spacing=6),
+            ft.Container(height=8),
+            *([self._row(i) for i in items]
+              or [ft.Text("No videos yet. Add a channel above.", size=13, color=S)]),
+        ]
+
+    def _add_rumble(self,e):
+        text=(self.rb_input.value or "").strip()
+        if not text or self.adding: return
+        self.adding=True
+        self.rb_msg.value="Looking up channel..."
+        self.rb_input.disabled=True
+        try: self.update()
+        except Exception: pass
+        def work():
+            try:
+                ch=rb.add_channel(text)
+                self.rb_msg.value,self.rb_input.value=f"Added {ch['name']}", ""
+            except Exception as ex:
+                self.rb_msg.value=f"Couldn't add channel: {ex}"
+            self.adding=False
+            self.rb_input.disabled=False
+            self._render()
+            try: self.update()
+            except Exception: pass
+        self.page.run_thread(work)
+
+
+    def _remove_rumble(self,ch):
+        rb.remove_channel(ch["id"])
+        self._render()
+        try:self.update()
+        except Exception:pass
+

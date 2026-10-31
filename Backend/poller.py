@@ -5,11 +5,13 @@ import notifier
 from dexerto.feeds import FEEDS, fetch_all
 from youtube.feeds import fetch_youtube, load_prefs,force_recheck
 from twitch.feeds import fetch_twitch
+from rumble.feeds import fetch_rumble
 
 SOURCES={
     **{name: (lambda feeds=feeds: fetch_all(feeds)) for name, feeds in FEEDS.items()},
     "Youtube":fetch_youtube,
     "Twitch":fetch_twitch,
+    "Rumble":fetch_rumble,
 }
 KIND_TEXT={
     "video":"uploaded a new video",
