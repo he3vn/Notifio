@@ -1,7 +1,5 @@
 <p align="center">
   <img src="Assets/Ferdium_1024x1024x32-recolored.png" width="100"
-   
-  alt="Notifio logo" />
 </p>
 
 <h1 align="center">Notifio</h1>
@@ -14,7 +12,8 @@
 
 Built with Python and [Flet](https://flet.dev). Notifio tracks **Twitch, YouTube, Rumble and news feeds** (powered by [Dexerto](https://www.dexerto.com)) with no accounts and no API keys.
 
-![Notifio](Assets/hero_preview.jpg)
+![Notifio](Assets/hero_preview.png)
+
 
 ---
 
@@ -63,11 +62,6 @@ Grab the latest build from the [Releases page](https://github.com/he3vn/Notifio/
 > Follow Twitch streamers and receive alerts the moment they go live.
 
 ![Twitch Stream Tracking](Assets/SCR-20261031-heix.png)
-
-### macOS Menu Bar Indicator
-> Lightweight menu bar tray app showing missed notification counts and quick actions.
-
-<img src="Assets/SCR-20261019-ffwr.png" width="70" alt="Menu Bar Icon" />
 
 ---
 
