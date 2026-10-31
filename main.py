@@ -20,7 +20,7 @@ for d in(UI_DIR,BACKEND_DIR):
 if "--tray" in sys.argv:
     import tray
     try:
-        pid=int(sys.argv[sys.agrv.index("--tray")+1])
+        pid=int(sys.argv[sys.argv.index("--tray")+1])
     except Exception: pid= os.getpid()
     tray.run(pid)
     sys.exit(0)
