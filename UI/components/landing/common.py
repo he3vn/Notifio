@@ -1,4 +1,4 @@
-"""Shared bits for the landing pages: config, helpers, glossy button, page layout."""
+
 from pathlib import Path
 import flet as ft
 ASSETS = Path(__file__).resolve().parents[3] / "Assets"

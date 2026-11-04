@@ -55,12 +55,15 @@ def save_plugins(plugins: list):
     _write_setup({**saved, "setup_done": True})
     save_user({"plugins": plugins})
 
+
 def _log(text):
     try:
         with open(get_data_dir() / "ui.log", "a") as f:
             f.write(text + "\n")
     except Exception:
         pass
+
+
 _tray_proc = None
 
 
@@ -113,7 +116,7 @@ async def main(page: ft.Page):
         page.window.min_width, page.window.min_height = 500, 520
         page.window.title_bar_hidden = True
 
-    root = ft.Container(content=LandingScreen(page=page), expand=True)
+    root = ft.Container(expand=True)
     page.add(root)
 
     poller_ref = {"p": None}
@@ -123,7 +126,7 @@ async def main(page: ft.Page):
             poller_ref["p"].stop()
             poller_ref["p"] = None
 
-    state = {"visible": True, "catchup": True,"shown_at":0.0}
+    state = {"visible": True, "catchup": True, "shown_at": 0.0}
     page.window.prevent_close = True
     loop = asyncio.get_running_loop()
 
@@ -135,25 +138,26 @@ async def main(page: ft.Page):
             return
         _log("hide window called")
         try:
-            state["visible"]=False
-            page.window.visible=False
+            state["visible"] = False
+            page.window.visible = False
             page.update()
-        except Exception: _log("hide_window failed:\n" +traceback.format_exc())
-
+        except Exception:
+            _log("hide_window failed:\n" + traceback.format_exc())
 
     async def show_window():
         _log("show_window called")
         try:
-            state["shown_at"]=time.time()
-            state["visible"]=True
-            page.window.visible=True
-            page.window.minimized=False
+            state["shown_at"] = time.time()
+            state["visible"] = True
+            page.window.visible = True
+            page.window.minimized = False
             page.update()
             await asyncio.sleep(0.2)
             try:
                 from AppKit import NSApplication
                 NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-            except Exception: _log("activate failed:\n" + traceback.format_exc())
+            except Exception:
+                _log("activate failed:\n" + traceback.format_exc())
             try:
                 await page.window.to_front()
             except Exception:
@@ -162,8 +166,6 @@ async def main(page: ft.Page):
             _log("show_window done")
         except Exception:
             _log("show_window failed:\n" + traceback.format_exc())
-
-                
 
     async def quit_app():
         threading.Timer(2.5, lambda: os._exit(0)).start()
@@ -231,7 +233,19 @@ async def main(page: ft.Page):
         page.update()
         start_poller(data.get("plugins", []))
 
-    page.update()
+    def finish_setup(plugins):
+        data = {"plugins": plugins}
+        mark_setup_done(data)
+        save_user({"plugins": plugins})
+        open_home(data)
+
+    mark_setup_pending()
+    saved = load_setup()
+    if saved:
+        open_home(saved)
+    else:
+        root.content = LandingScreen(page=page, on_finish=finish_setup)
+        page.update()
 
 
 if __name__ == "__main__":

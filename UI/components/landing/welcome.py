@@ -1,4 +1,3 @@
-"""Page 1: title, subtitle and the 'Get started' button."""
 import flet as ft
 from .common import GlossyButton, TITLE_FONT, layout
 

@@ -1,7 +1,4 @@
-"""Page 2: 'Select your plugins' with 4 selectable boxes.
 
-The bottom button is 'Back' until at least one plugin is picked, then 'Continue'.
-"""
 import flet as ft
 from .common import (BLUE, LOGOS, TITLE_FONT, GlossyButton,
                      border_all, layout, make_alignment, make_icon)

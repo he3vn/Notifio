@@ -40,7 +40,7 @@ class LandingScreen(ft.Container):
             "welcome": WelcomePage(on_start=lambda: self.show("plugins")),
             "plugins": PluginsPage(on_back=lambda: self.show("welcome"),
                                    on_continue=self._plugins_done),
-            "done": DonePage(on_back=lambda: self.show("plugins")),
+            "done": DonePage(on_finish=self._finish),
         }
         for key, pg in self.pages.items():
             pg.root.visible = key == "welcome"
@@ -68,6 +68,10 @@ class LandingScreen(ft.Container):
     def _plugins_done(self, selected):
         self.selected_plugins = selected
         self.show("done")
+
+    def _finish(self):
+        if self.on_finish:
+            self.on_finish(list(self.selected_plugins))
 
     def _on_pointer(self, e):
         try:
