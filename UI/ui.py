@@ -18,7 +18,7 @@ for d in (UI_DIR, BACKEND_DIR):
         sys.path.insert(0, str(d))
 
 import control
-from components import LoadingScreen, HomeScreen, SetupWizard
+from components import LoadingScreen, LandingScreen, HomeScreen
 from storage import save_user, get_data_dir, read_json, write_json
 from poller import Poller
 
@@ -113,7 +113,7 @@ async def main(page: ft.Page):
         page.window.min_width, page.window.min_height = 500, 520
         page.window.title_bar_hidden = True
 
-    root = ft.Container(content=LoadingScreen(), expand=True)
+    root = ft.Container(content=LandingScreen(page=page), expand=True)
     page.add(root)
 
     poller_ref = {"p": None}
@@ -201,17 +201,11 @@ async def main(page: ft.Page):
     })
     start_tray()
 
-    def redo_setup():
-        stop_poller()
-        mark_setup_pending()
-        page.run_task(show_setup)
-
     def open_home(data: dict):
         stop_poller()
         home = HomeScreen(
             plugins=data.get("plugins", []),
             name=data.get("name", ""),
-            on_settings=redo_setup,
         )
 
         def on_poll(added, failed, fresh):
@@ -237,24 +231,7 @@ async def main(page: ft.Page):
         page.update()
         start_poller(data.get("plugins", []))
 
-    def finish_setup(data: dict):
-        save_user(data)
-        mark_setup_done(data)
-        open_home(data)
-
-    async def show_setup():
-        root.content = LoadingScreen()
-        page.update()
-        await asyncio.sleep(1.5)
-        root.content = SetupWizard(on_finish=finish_setup)
-        page.update()
-
-    saved = load_setup()
-    if saved:
-        await asyncio.sleep(0.5)
-        open_home(saved)
-    else:
-        await show_setup()
+    page.update()
 
 
 if __name__ == "__main__":
@@ -262,4 +239,3 @@ if __name__ == "__main__":
         ft.run(main, assets_dir=str(ASSETS_DIR))
     else:
         ft.app(target=main, assets_dir=str(ASSETS_DIR))
-
