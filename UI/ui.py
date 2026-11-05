@@ -26,10 +26,11 @@ SETUP_FILE = get_data_dir() / "user_setup.json"
 
 
 def load_setup():
-    for f in [SETUP_FILE, PROJECT_DIR / "user_setup.json"]:
-        saved = read_json(f, None)
-        if isinstance(saved, dict) and saved.get("setup_done"):
-            return saved
+    saved = read_json(SETUP_FILE, None)
+    if saved is None:
+        saved = read_json(PROJECT_DIR / "user_setup.json", None)
+    if isinstance(saved, dict) and saved.get("setup_done"):
+        return saved
     return None
 
 
@@ -42,11 +43,6 @@ def _write_setup(data: dict):
 
 def mark_setup_done(data: dict):
     _write_setup({**data, "setup_done": True})
-
-
-def mark_setup_pending():
-    saved = load_setup() or {}
-    _write_setup({**saved, "setup_done": False})
 
 
 def save_plugins(plugins: list):
@@ -229,17 +225,22 @@ async def main(page: ft.Page):
             start_poller(plugins)
 
         home.on_plugins_changed = plugins_changed
+        home.on_settings = redo_setup
         root.content = home
         page.update()
         start_poller(data.get("plugins", []))
 
+    def redo_setup():
+        stop_poller()
+        root.content = LandingScreen(page=page, on_finish=finish_setup)
+        page.update()
+
     def finish_setup(plugins):
-        data = {"plugins": plugins}
+        data = {**(load_setup() or {}), "plugins": plugins}
         mark_setup_done(data)
         save_user({"plugins": plugins})
         open_home(data)
 
-    mark_setup_pending()
     saved = load_setup()
     if saved:
         open_home(saved)
