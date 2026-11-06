@@ -1,17 +1,26 @@
+import asyncio
+import colorsys
+import subprocess
 from datetime import datetime
 import flet as ft
 from pathlib import Path
 import notifications
 from dexerto.feeds import FEEDS, ago
+from storage import save_user,load_user
 from .plugins import TOP, BOTTOM
 from youtube import feeds as yt
 from twitch import feeds as tw
 from rumble import feeds as rb
+try:
+    import flet_video as ftv
+except ImportError:
+    ftv=None
 
 ASSETS=Path(__file__).resolve().parents[2] /"Assets"
 LOGOS= ASSETS/"logos"
 BRAND_LOGO= ASSETS/"Ferdium_1024x1024x32-recolored.png"
-BG_IMAGE=ASSETS/ "dot.webp"
+BG_IMAGE=ASSETS/"SCR-20261106-lmcs.jpeg"
+BG_VIDEO=ASSETS/"wallpaper.mp4"
 
 FILES= dict(TOP+BOTTOM)
 AVAILAIBLE=set(FEEDS) | {"Youtube", "Twitch", "Rumble"}
@@ -28,12 +37,19 @@ BRAND_W = 40
 ITEM_H = 36
 ICON_W = 40
 GAP = 2
+BTN=ft.ButtonStyle(bgcolor="#f7f8fb",color="#0b0b0f",shape=ft.RoundedRectangleBorder(radius=19),padding=ft.Padding(22,0,22,0),text_style=ft.TextStyle(font_family="Inter-Medium",size=13,weight=ft.FontWeight.W_500))
 
 def _anim(ms=260):
     return ft.Animation(ms,ft.AnimationCurve.EASE_OUT)
 
 def _name_w(name):
     return max(64,int(len(name)*8+34))
+
+def _tint(hue,amt):
+     r,g,b=(int(c*255) for c in colorsys.hls_to_rgb(hue/360,0.85,1))
+     return  f"#{int(amt*255):02x}{r:02x}{g:02x}{b:02x}"
+
+
 
 
 class HomeScreen(ft.Container):
@@ -138,36 +154,21 @@ class HomeScreen(ft.Container):
             ),
         )
 
+        self.wall=ft.Container(left=0,right=0,top=0,bottom=0,content=self._bg())
+        self.veil=ft.Container(left=0,right=0,top=0,bottom=0,bgcolor=_tint(self._pref("bg_hue",200),self._pref("bg_tint",0)))
+        self.tabcol=ft.Column(spacing=4)
+        self.pane=ft.Container(expand=True,height=280,padding=ft.Padding(20,18,18,18))
         self.settings_box=ft.Container(
-            visible=False,right=16,top=BAR_H+24,
-            bgcolor="#000000",border_radius=18,
-            padding=ft.Padding(10,10,10,10),
+            visible=False,right=16,top=BAR_H+24,width=480,height=280,
+            bgcolor="#000000",border_radius=18,clip_behavior=ft.ClipBehavior.HARD_EDGE,
             border=ft.Border.all(1,"#23252a"),
-            shadow=[ft.BoxShadow(blur_radius=24, color="#66000000", offset=ft.Offset(0, 8))],
-            content=ft.Button(
-                "Redo setup",on_click=self._redo,height=38,
-                style=ft.ButtonStyle(
-                    bgcolor="#f7f8fb",color="#0b0b0f",shape=ft.RoundedRectangleBorder(radius=19),
-                    padding=ft.Padding(22,0,22,0),
-                    text_style=ft.TextStyle(font_family="Inter-Medium",size=13,weight=ft.FontWeight.W_500),
-                ),
-            ),
+            shadow=[ft.BoxShadow(blur_radius=24,color="#66000000",offset=ft.Offset(0,8))],
+            content=ft.Row([ft.Container(content=self.tabcol,width=130,height=280,padding=10,bgcolor="#0e0f11"),self.pane],spacing=0),
         )
-
-        layers=[]
-        if BG_IMAGE.is_file():
-            fit=getattr(ft,"BoxFit",None) or ft.ImageFit
-            layers.append(ft.Container(
-                left=0, right=0, top=0, bottom=0,
-                content=ft.Image(src=str(BG_IMAGE), fit=fit.COVER, expand=True,gapless_playback=True)
-            ))
-        layers.append(ft.Container(
-            left=0,right=0,top=0,bottom=0,
-            content=ft.Column(expand=True,spacing=0,controls=[top_bar, panel]),
-        ))
-        layers.append(self.settings_box)
-        self.content=ft.Stack(expand=True,controls=layers)
+        self.content=ft.Stack(expand=True,controls=[self.wall,self.veil,ft.Container(left=0,right=0,top=0,bottom=0,content=ft.Column(expand=True,spacing=0,controls=[top_bar, panel])),self.settings_box])
+        self._tab("Setup")
         self._render()
+        
 
 
     def _safe_update(self):
@@ -187,6 +188,55 @@ class HomeScreen(ft.Container):
             self.page.pop_dialog()
         except AttributeError:
             self.page.close(dlg)
+
+    def _pref(self,k,d):
+        return (load_user()or {}).get(k,d)
+
+    def _bg(self):
+        p=self._pref("bg_video","")
+        if ftv and p and Path(p).is_file():
+                        return ftv.Video(playlist=[ftv.VideoMedia(p)],playlist_mode=ftv.PlaylistMode.LOOP,autoplay=True,muted=True,fit=ft.BoxFit.COVER,expand=True)
+        return ft.Image(src=str(BG_IMAGE),fit=ft.BoxFit.COVER,expand=True,gapless_playback=True) if BG_IMAGE.is_file() else ft.Container()
+
+    def _set_bg(self,p):
+        save_user({"bg_video":p})
+        self.wall.content=self._bg()
+        self._tab("Background")
+
+    async def _pick(self,e):
+        try:
+            f=await ft.FilePicker().pick_files(file_type=ft.FilePickerFileType.CUSTOM,allowed_extensions=["mp4"],allow_multiple=False)
+            p=f[0].path if f else None
+        except Exception:
+            r=await asyncio.to_thread(subprocess.run,["osascript","-e",'POSIX path of (choose file of type {"public.mpeg-4"} with prompt "Select MP4")'],capture_output=True,text=True)
+            p=r.stdout.strip()
+        if p:
+            self._set_bg(p)
+
+    def _tab(self,k):
+        panes={"Setup":self._p_setup,"Background":self._p_bg,"Theme":self._p_theme}
+        self.tabcol.controls=[ft.Container(content=ft.Text(t,size=13,color=H if t==k else S,font_family="Inter-Medium"),padding=ft.Padding(12,9,12,9),border_radius=10,bgcolor="#1c1d20" if t==k else None,on_click=lambda e,t=t:self._tab(t)) for t in panes]
+        self.pane.content=panes[k]()
+        self._safe_update()
+
+    def _p_setup(self):
+        return ft.Column([ft.Button("Redo setup",on_click=self._redo,height=38,style=BTN)])
+
+    def _p_bg(self):
+        p=self._pref("bg_video","") or str(BG_VIDEO)
+        self.bg_msg=ft.Text("Run: pip install flet-video" if p and not ftv else Path(p).name or "Default",size=12,color=S)
+        return ft.Column([ft.Button("Choose MP4",on_click=self._pick,height=38,style=BTN),ft.Button("Use default",on_click=lambda e:self._set_bg(""),height=38,style=BTN),self.bg_msg],spacing=12)
+    
+    def _p_theme(self):
+        def apply(e):
+            self.veil.bgcolor=_tint(hue.value,amt.value)
+            self.veil.update()
+        def save(e):
+            save_user({"bg_hue":hue.value,"bg_tint":amt.value})
+        hue=ft.Slider(min=0,max=360,value=self._pref("bg_hue",200),on_change=apply,on_change_end=save,thumb_color="#ffffff",active_color="#00000000",inactive_color="#00000000")
+        amt=ft.Slider(min=0,max=0.8,value=self._pref("bg_tint",0),on_change=apply,on_change_end=save,thumb_color="#ffffff",active_color="#8a8f98",inactive_color="#26282c")
+        rainbow=ft.Container(left=12,right=12,top=20,height=8,border_radius=4,gradient=ft.LinearGradient(colors=[_tint(x,1) for x in range(0,361,60)]))
+        return ft.Column([ft.Text("Color",size=12,color=S),ft.Stack([rainbow,hue]),ft.Text("Strength",size=12,color=S),amt],spacing=6)
 
 
     def _brand(self):
@@ -599,4 +649,3 @@ class HomeScreen(ft.Container):
         rb.remove_channel(ch["id"])
         self._render()
         self._safe_update()
-
