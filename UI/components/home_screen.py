@@ -195,7 +195,7 @@ class HomeScreen(ft.Container):
         else:
             img=ft.Icon(ft.Icons.NOTIFICATIONS_NONE,size=22,color=PILL_TEXT)
         return ft.Container(
-            width=BRAND_W,height=ITEM_H,border_radius=ITEM_H /2,
+                        width=BRAND_W,height=ITEM_H,border_radius=ITEM_H /2,bgcolor=PILL_TEXT,
             alignment=ft.Alignment(0,0),content=img,
             tooltip="Home",on_click=self._go_home,
         )

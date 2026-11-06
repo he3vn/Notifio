@@ -1,7 +1,6 @@
-
 import flet as ft
 from .common import (BLUE, LOGOS, TITLE_FONT, GlossyButton,
-                     border_all, layout, make_alignment, make_icon)
+                     border_all, layout, make_alignment, make_icon, play_click)
 
 PLUGINS = [
     ("Twitch", "twitch.png"),
@@ -38,6 +37,11 @@ class PluginCard(ft.Container):
         )
         check = ft.Container(right=10, top=10, visible=False,
                              content=make_icon("CHECK_CIRCLE_ROUNDED", 24, "white"))
+
+        def clicked(e):
+            play_click()
+            on_toggle(name)
+
         super().__init__(
             width=self.W, height=self.H, border_radius=26,
             bgcolor="#40FFFFFF",
@@ -47,7 +51,7 @@ class PluginCard(ft.Container):
             scale=1.0,
             animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
             on_hover=self._hover,
-            on_click=lambda e: on_toggle(name),
+            on_click=clicked,
         )
         self._check = check
 

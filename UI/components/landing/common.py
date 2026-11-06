@@ -1,28 +1,52 @@
-
+import subprocess
+import sys
+import threading
 from pathlib import Path
 import flet as ft
+ 
 ASSETS = Path(__file__).resolve().parents[3] / "Assets"
 LOGOS = ASSETS / "logos"
-
+CLICK_SOUND = ASSETS / "click.wav"
+ 
 TITLE_FONT = "Helvetica Neue"
 BLUE = "#3434d6"
-
-
-
+ 
+ 
+def play_click():
+    if not CLICK_SOUND.is_file():
+        return
+ 
+    def _run():
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["afplay", str(CLICK_SOUND)], timeout=5,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            elif sys.platform.startswith("win"):
+                import winsound
+                winsound.PlaySound(str(CLICK_SOUND), winsound.SND_FILENAME)
+            else:
+                subprocess.run(["aplay", "-q", str(CLICK_SOUND)], timeout=5,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+ 
+    threading.Thread(target=_run, daemon=True).start()
+ 
+ 
 def make_alignment(x: float, y: float):
     try:
         return ft.Alignment(x, y)
     except AttributeError:  # older flet
         return ft.alignment.Alignment(x, y)
-
-
+ 
+ 
 def border_all(width, color):
     try:
         return ft.Border.all(width, color)  # newer flet
     except AttributeError:
         return ft.border.all(width, color)  # older flet
-
-
+ 
+ 
 def make_icon(name, size, color):
     """Icon control, or None if this flet version lacks it."""
     try:
@@ -30,8 +54,8 @@ def make_icon(name, size, color):
         return ft.Icon(getattr(icons, name), size=size, color=color)
     except Exception:
         return None
-
-
+ 
+ 
 def make_label(text, color, glow):
     """Button text with an optional soft glow."""
     weight = ft.FontWeight.W_600
@@ -42,12 +66,13 @@ def make_label(text, color, glow):
     except Exception:
         pass
     return ft.Text(text, size=18, weight=weight, color=color)
-
+ 
+ 
 class GlossyButton(ft.Container):
     WIDTH, HEIGHT = 244, 54
     TEXT = "#0a0a16"
     GLOW = "#D9FFFFFF"
-
+ 
     def __init__(self, text, on_click, icon_name="ARROW_FORWARD_ROUNDED"):
         row = ft.Row(
             self._items(text, icon_name),
@@ -79,42 +104,45 @@ class GlossyButton(ft.Container):
             ],
             content=ft.Stack([gloss, label_layer]),
         )
+
+        def clicked(e):
+            play_click()
+            if on_click:
+                on_click(e)
+
         super().__init__(
             content=body,
             scale=1.0,
-            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
-            on_click=on_click,
+            animate_scale=ft.Animation(150,ft.AnimationCurve.EASE_OUT),
+            on_click=clicked,
             on_hover=self._hover,
         )
-        self._row = row
+        self._row=row
 
     @classmethod
-    def _items(cls, text, icon_name):
-        items = []
-        ic = make_icon(icon_name, 20, cls.TEXT)
+    def _items(cls,text,icon_name):
+        items=[]
+        ic=make_icon(icon_name,20,cls.TEXT)
         if ic is not None:
             items.append(ic)
-        items.append(make_label(text, cls.TEXT, cls.GLOW))
+        items.append(make_label(text,cls.TEXT,cls.GLOW))
         return items
 
-    def set(self, text, icon_name):
-        """Change the label + icon (e.g. Back -> Continue)."""
+    def set(self,text,icon_name):
         self._row.controls = self._items(text, icon_name)
         try:
             self.update()
         except Exception:
             pass
 
-    def _hover(self, e):
-        self.scale = 1.05 if str(e.data).lower() == "true" else 1.0
+    def _hover(self,e):
+        self.scale=1.05 if str(e.data).lower()=="true" else 1.0
         try:
             self.update()
         except Exception:
             pass
 
-
 def layout(center_content, button, y=-0.15):
-    """Returns (root, fg). `fg` is the part that moves with the parallax."""
     fg = ft.Container(expand=True, alignment=make_alignment(0, y), content=center_content)
     root = ft.Container(
         expand=True,
@@ -123,8 +151,10 @@ def layout(center_content, button, y=-0.15):
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 fg,
-                ft.Container(height=150, alignment=make_alignment(0, 0), content=button),
+                ft.Container(height=150,alignment=make_alignment(0,0),content=button),
             ],
         ),
     )
-    return root, fg
+    return root,fg
+  
+    

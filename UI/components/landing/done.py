@@ -1,6 +1,6 @@
 import flet as ft
 from .common import (GlossyButton, TITLE_FONT, border_all, layout,
-                     make_alignment, make_icon)
+                     make_alignment, make_icon, play_click)
 
 GITHUB = "https://github.com/he3vn/Notifio"
 HACKCLUB = "https://hackclub.com/"
@@ -29,6 +29,7 @@ class LinkButton(ft.Container):
             url=url,
             scale=1.0,
             animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            on_click=lambda e: play_click(),
             on_hover=self._hover,
         )
 
