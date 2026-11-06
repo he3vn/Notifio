@@ -34,7 +34,7 @@ def _anim(ms=260):
 
 def _name_w(name):
     return max(64,int(len(name)*8+34))
-            
+
 
 class HomeScreen(ft.Container):
     def __init__(self, name="", on_settings=None, plugins=None):
@@ -51,17 +51,23 @@ class HomeScreen(ft.Container):
         self.nav_hover=False
         self.nav_items={}
 
-        self.title=ft.Text("Notifications",size=22,color=H,font_family="Inter-Semibold",weight=ft.FontWeight.W_600)
-        self.subtitle=ft.Text(f"Welcome back,{name}"if name else "",size=13,color=S)
+        self.title=ft.Text("Notifications",size=22,color=H,font_family="Inter-SemiBold",weight=ft.FontWeight.W_600)
+        self.subtitle=ft.Text(f"Welcome back, {name}"if name else "",size=13,color=S)
         self.status=ft.Text("",size=11,color=S)
         self.remove_btn=ft.TextButton(
             "Remove plugin",visible=False,
             on_click=self._remove_selected,
             style=ft.ButtonStyle(color="#ef6b6b"),
-            
+
         )
         self.yt_input=ft.TextField(
             hint_text="@handle or channel URL",dense=True,width=320,
+            text_style=ft.TextStyle(size=13,color=H),
+            on_submit=self._add_channel,
+        )
+        self.yt_msg=ft.Text("",size=12,color=S)
+        self.tw_input=ft.TextField(
+            hint_text="channel name or twitch.tv URL",dense=True,width=320,
             text_style=ft.TextStyle(size=13,color=H),
             on_submit=self._add_twitch,
         )
@@ -118,7 +124,7 @@ class HomeScreen(ft.Container):
                     action(ft.Icons.ADD,"Add plugin",self._add_plugin),
                     action(ft.Icons.DELETE_OUTLINE,"Clear all notifications",self._clear),
                     action(ft.Icons.REFRESH,"Check now",self._manual_refresh),
-                    action(ft.Icons.SEETINGS_OUTLINED,"Settings",self._toggle_settings),
+                    action(ft.Icons.SETTINGS_OUTLINED,"Settings",self._toggle_settings),
                     ],
             )
         )
@@ -126,9 +132,471 @@ class HomeScreen(ft.Container):
         top_bar=ft.Container(
             padding=ft.Padding(16,16,16,0),
             content=ft.Row(
-                [self.nav_pill,ft.Containter(expand=True),actions],
+                [self.nav_pill,ft.Container(expand=True),actions],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
 
             ),
         )
-        
+
+        self.settings_box=ft.Container(
+            visible=False,right=16,top=BAR_H+24,
+            bgcolor="#000000",border_radius=18,
+            padding=ft.Padding(10,10,10,10),
+            border=ft.Border.all(1,"#23252a"),
+            shadow=[ft.BoxShadow(blur_radius=24, color="#66000000", offset=ft.Offset(0, 8))],
+            content=ft.Button(
+                "Redo setup",on_click=self._redo,height=38,
+                style=ft.ButtonStyle(
+                    bgcolor="#f7f8fb",color="#0b0b0f",shape=ft.RoundedRectangleBorder(radius=19),
+                    padding=ft.Padding(22,0,22,0),
+                    text_style=ft.TextStyle(font_family="Inter-Medium",size=13,weight=ft.FontWeight.W_500),
+                ),
+            ),
+        )
+
+        layers=[]
+        if BG_IMAGE.is_file():
+            fit=getattr(ft,"BoxFit",None) or ft.ImageFit
+            layers.append(ft.Container(
+                left=0, right=0, top=0, bottom=0,
+                content=ft.Image(src=str(BG_IMAGE), fit=fit.COVER, expand=True,gapless_playback=True)
+            ))
+        layers.append(ft.Container(
+            left=0,right=0,top=0,bottom=0,
+            content=ft.Column(expand=True,spacing=0,controls=[top_bar, panel]),
+        ))
+        layers.append(self.settings_box)
+        self.content=ft.Stack(expand=True,controls=layers)
+        self._render()
+
+
+    def _safe_update(self):
+        try:
+            self.update()
+        except Exception:
+            pass
+
+    def _open_dialog(self,dlg):
+        try:
+            self.page.show_dialog(dlg)
+        except AttributeError:
+            self.page.open(dlg)
+
+    def _close_dialog(self,dlg):
+        try:
+            self.page.pop_dialog()
+        except AttributeError:
+            self.page.close(dlg)
+
+
+    def _brand(self):
+        if BRAND_LOGO.is_file():
+            img=ft.Image(src=str(BRAND_LOGO),width=28,height=28,border_radius=8,fit=ft.BoxFit.CONTAIN)
+        else:
+            img=ft.Icon(ft.Icons.NOTIFICATIONS_NONE,size=22,color=PILL_TEXT)
+        return ft.Container(
+            width=BRAND_W,height=ITEM_H,border_radius=ITEM_H /2,
+            alignment=ft.Alignment(0,0),content=img,
+            tooltip="Home",on_click=self._go_home,
+        )
+
+    def _nav_item(self,name):
+        path=LOGOS/FILES.get(name,"")
+        if path.is_file():
+            logo=ft.Image(src=str(path),width=24,height=24,fit=ft.BoxFit.CONTAIN)
+        else:
+            logo = ft.Text(name[0], size=16, color=PILL_TEXT, weight=ft.FontWeight.W_700)
+        logo_layer=ft.Container(
+            left=0,right=0,top=0,bottom=0,alignment=ft.Alignment(0,0),
+            content=logo,opacity=1,animate_opacity=_anim(200),
+        )
+        text_layer=ft.Container(
+            left=0,right=0,top=0,bottom=0,
+            alignment=ft.Alignment(0,0),
+            content=ft.Text(name,size=13,color=PILL_TEXT,font_family="Inter-Medium",no_wrap=True),
+            opacity=0,animate_opacity=_anim(200),
+        )
+        box=ft.Container(
+            width=ICON_W,height=ITEM_H,border_radius=ITEM_H/2,
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
+            animate=_anim(260),
+            on_click=lambda e, n=name: self._select(n),
+            content=ft.Stack([logo_layer, text_layer]),
+        )
+        self.nav_items[name]={"box":box,"logo":logo_layer,"text":text_layer}
+        return box
+
+    def _rebuild_nav(self):
+        self.nav_items={}
+        boxes = [self._nav_item(n) for n in self.plugins]
+        self.nav_row.controls = [self._brand(), *boxes]
+        self._layout_nav()
+
+    def _layout_nav(self):
+        total=PAD*2 +BRAND_W
+        for name in self.plugins:
+            it=self.nav_items.get(name)
+            if not it:
+                continue
+            w=_name_w(name) if self.nav_hover else ICON_W
+            it["box"].width = w
+            it["box"].bgcolor = PILL_SELECTED if name == self.selected else None
+            it["logo"].opacity = 0 if self.nav_hover else 1
+            it["text"].opacity = 1 if self.nav_hover else 0
+            total += w +GAP
+        self.nav_pill.width=total
+
+    def _nav_hover(self,e):
+        on=str(e.data).lower() =="true"
+        if on == self.nav_hover:
+            return
+        self.nav_hover=on
+        self._layout_nav()
+        try:
+            self.nav_pill.update()
+        except Exception:
+            pass
+
+    def _view_changed(self):
+        self.settings_box.visible=False
+        self._layout_nav()
+        self._render()
+        self._safe_update()
+
+    def _select(self,name):
+        self.selected=None if self.selected == name else name
+        self._view_changed()
+
+    def _go_home(self,e=None):
+        self.selected=None
+        self._view_changed()
+
+    def _toggle_settings(self,e):
+        self.settings_box.visible=not self.settings_box.visible
+        self._safe_update()
+
+    def _redo(self,e):
+        self.settings_box.visible=False
+        self._safe_update()
+        if self.on_settings:
+            self.on_settings()
+
+    def _add_plugin(self,e):
+        self.settings_box.visible=False
+        self._safe_update()
+        available=[n for n, _ in TOP + BOTTOM if n not in self.plugins]
+        if not available:
+            dlg=ft.AlertDialog(
+                title=ft.Text("Add plugins"),
+                content=ft.Text("You've already added every available plugin."),
+                actions=[ft.TextButton("Close", on_click=lambda ev: self._close_dialog(dlg))],
+            )
+            self._open_dialog(dlg)
+            return
+        checks= {}
+        for n in available:
+            label= n if n in AVAILAIBLE else f"{n} (coming soon)"
+            checks[n]=ft.Checkbox(label=label,value=False)
+
+        def confirm(ev):
+            chosen=[n for n,cb in checks.items() if cb.value]
+            self._close_dialog(dlg)
+            if chosen:
+                self._apply_plugins(chosen)
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("Add plugins"),
+            content=ft.Column(list(checks.values()), tight=True, spacing=4),
+            actions=[
+                ft.TextButton("Cancel",on_click=lambda ev: self._close_dialog(dlg)),
+                ft.TextButton("Add",on_click=confirm),
+            ],
+        )
+        self._open_dialog(dlg)
+
+    def _apply_plugins(self,chosen):
+        self.plugins=self.plugins+chosen
+        self.selected=chosen[0]
+        self._rebuild_nav()
+        self._render()
+        self._safe_update()
+        if self.on_plugins_changed:
+            self.on_plugins_changed(list(self.plugins))
+
+    def _remove_plugin(self,name):
+        self.plugins=[p for p in self.plugins if p != name]
+        if self.selected == name:
+            self.selected=None
+        self._rebuild_nav()
+        self._render()
+        self._safe_update()
+        if self.on_plugins_changed:
+            self.on_plugins_changed(list(self.plugins))
+
+    def _remove_selected(self,e):
+        if self.selected:
+            self._remove_plugin(self.selected)
+
+    def _render(self):
+        self.title.value=self.selected or "Notifications"
+        self.remove_btn.visible=bool(self.selected)
+        if not self.selected:
+            self.status.value=""
+            msg = ("Select a plugin to view the notifications" if self.plugins else "No plugins yet. Press + to add one.")
+            self.body.controls = [ft.Text(msg, size=13, color=S)]
+            return
+        if self.selected=="Youtube":
+            self._render_youtube()
+            return
+        if self.selected=="Twitch":
+            self._render_twitch()
+            return
+        if self.selected=="Rumble":
+            self._render_rumble()
+            return
+        self.status.value=self.last_status
+        items=[i for i in notifications.load() if i.get("plugin")== self.selected][:MAX_SHOWN]
+        if items:
+            self.body.controls = [self._row(i) for i in items]
+        elif self.selected not in AVAILAIBLE:
+            self.body.controls=[ft.Text("This source isnt availaible yet.",size=13,color=S)]
+        else:
+            self.body.controls = [ft.Text("No notifications yet.", size=13, color=S)]
+
+
+    def _row(self,item):
+        delete=ft.IconButton(
+            icon=ft.Icons.CLOSE,icon_size=16,icon_color=S,
+            tooltip="Remove",opacity=0,
+            on_click=lambda e: self._delete(item),
+        )
+
+        def hover(e):
+            delete.opacity=1 if e.data in(True,"true") else 0
+            try:
+                delete.update()
+            except Exception:
+                pass
+
+        return ft.Container(
+            padding=ft.Padding(14,4,6,4),border_radius=8,bgcolor="#141516",
+            on_hover=hover,
+            content=ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                ft.Container(
+                    url=item["link"],expand=True,
+                    padding=ft.Padding(0,6,0,6),
+                    content=ft.Column(spacing=2,controls=[
+                        ft.Text(item["title"], size=13, color=H, font_family="Inter-Medium"),
+                        ft.Text(
+                            f'{item["source"]} · {KIND_LABEL[item["kind"]]} · {ago(item["ts"])}'
+                            if item.get("kind") in KIND_LABEL
+                            else f'{item["source"]} · {ago(item["ts"])}',
+                            size=11, color=S,
+                        ),
+                    ]),
+                ),
+                delete,
+            ]),
+        )
+
+    def _delete(self,item):
+        notifications.remove(item["link"])
+        self._render()
+        self._safe_update()
+
+    def _clear(self,e):
+        self.settings_box.visible=False
+        notifications.clear_all()
+        self._render()
+        self._safe_update()
+
+    def on_poll(self,added,failed,fresh=None):
+        now=datetime.now().strftime("%H:%M")
+        self.last_status = f"Couldn't refresh at {now}" if failed else f"Last checked {now}"
+        if self.selected:
+            self._render()
+        self._safe_update()
+
+    def _manual_refresh(self,e):
+        self.settings_box.visible=False
+        if self.on_refresh:
+            self.last_status="Checking..."
+            self._render()
+            self._safe_update()
+            self.on_refresh()
+        else:
+            self._safe_update()
+
+    def _render_youtube(self):
+        self.status.value=self.last_status
+        chips = [
+            ft.Container(
+                padding=ft.Padding(10, 2, 2, 2), border_radius=14, bgcolor="#141516",
+                content=ft.Row(tight=True, spacing=4, controls=[
+                    ft.Text(ch["name"], size=12, color=H, font_family="Inter-Medium"),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_size=12, icon_color=S, width=24, height=24,
+                                  on_click=lambda e, ch=ch: self._remove_channel(ch)),
+                ]),
+            )
+            for ch in yt.load_channels()
+        ]
+        prefs= yt.load_prefs()
+
+        def pref_box(label,kind):
+            return ft.Checkbox(
+                label=label,value=kind in prefs,
+                on_change=lambda e,k=kind: self._on_yt_pref(k,e),
+            )
+
+        items=[i for i in notifications.load() if i.get("plugin") == "Youtube"][:MAX_SHOWN]
+        self.body.controls=[
+            ft.Row([self.yt_input, ft.Button("Add", on_click=self._add_channel, height=36)], spacing=8),
+            self.yt_msg,
+            ft.Row(chips,wrap=True,spacing=6,run_spacing=6),
+            ft.Text("Notify me for:",size=12,color=S),
+            ft.Row([pref_box("Videos", "video"), pref_box("Shorts", "short"), pref_box("Lives", "live")], spacing=4),
+            ft.Container(height=8),
+            *([self._row(i) for i in items]
+              or [ft.Text("No videos yet. Add a channel above.", size=13, color=S)]),
+        ]
+
+    def _add_channel(self,e):
+        text=(self.yt_input.value or"").strip()
+        if not text or self.adding:
+            return
+        self.adding=True
+        self.yt_msg.value="Looking up channel..."
+        self.yt_input.disabled=True
+        self._safe_update()
+
+        def work():
+            try:
+                ch=yt.add_channel(text)
+                self.yt_msg.value,self.yt_input.value=f"Added {ch['name']}",""
+            except Exception as ex:
+                self.yt_msg.value=f"Couldn't add channel: {ex}"
+            self.adding=False
+            self.yt_input.disabled=False
+            self._render()
+            self._safe_update()
+
+        self.page.run_thread(work)
+
+    def _on_yt_pref(self,kind,e):
+        raw=str(e.data).lower() if e.data is not None else ""
+        if raw in("true","false"):
+            on= raw=="true"
+        else:
+            on=bool(e.control.value)
+        types=[t for t in yt.load_prefs() if t != kind]
+        if on:
+            types.append(kind)
+        yt.save_prefs(types)
+
+    def _remove_channel(self,ch):
+        yt.remove_channel(ch["id"])
+        self._render()
+        self._safe_update()
+
+    def _render_twitch(self):
+        self.status.value=self.last_status
+        chips=[
+            ft.Container(
+                padding=ft.Padding(10,2,2,2),border_radius=14,bgcolor="#141516",
+                content=ft.Row(tight=True,spacing=4,controls=[
+                    ft.Text(ch["name"], size=12, color=H, font_family="Inter-Medium"),
+                    ft.IconButton(icon=ft.Icons.CLOSE,icon_size=12,icon_color=S,width=24,height=24,on_click=lambda e,ch=ch: self._remove_twitch(ch)),
+                ]),
+            )
+            for ch in tw.load_channels()
+        ]
+        items=[i for i in notifications.load() if i.get("plugin")=="Twitch"][:MAX_SHOWN]
+        self.body.controls = [
+            ft.Row([self.tw_input, ft.Button("Add", on_click=self._add_twitch, height=36)], spacing=8),
+            self.tw_msg,
+            ft.Row(chips,wrap=True,spacing=6,run_spacing=6),
+            ft.Container(height=8),
+            *([self._row(i) for i in items]
+              or [ft.Text("No streams yet.Add a channel above.",size=13,color=S)]),
+        ]
+
+    def _add_twitch(self,e):
+        text=(self.tw_input.value or"").strip()
+        if not text or self.adding:
+            return
+        self.adding=True
+        self.tw_msg.value="Looking up channel..."
+        self.tw_input.disabled=True
+        self._safe_update()
+
+        def work():
+            try:
+                ch=tw.add_channel(text)
+                self.tw_msg.value,self.tw_input.value=f"Added {ch['name']}", ""
+                if self.on_refresh:
+                    self.on_refresh()
+            except Exception as ex:
+                self.tw_msg.value=f"Couldnt add channel: {ex}"
+            self.adding=False
+            self.tw_input.disabled=False
+            self._render()
+            self._safe_update()
+
+        self.page.run_thread(work)
+
+    def _remove_twitch(self,ch):
+        tw.remove_channel(ch["id"])
+        self._render()
+        self._safe_update()
+
+    def _render_rumble(self):
+        self.status.value=self.last_status
+        chips=[
+            ft.Container(
+                padding=ft.Padding(10,2,2,2),border_radius=14,bgcolor="#141516",
+                content=ft.Row(tight=True, spacing=4, controls=[
+                    ft.Text(ch["name"], size=12, color=H, font_family="Inter-Medium"),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_size=12, icon_color=S, width=24, height=24,
+                                  on_click=lambda e, ch=ch: self._remove_rumble(ch)),
+                ]),
+            )
+            for ch in rb.load_channels()
+
+        ]
+        items=[i for i in notifications.load() if i.get("plugin")=="Rumble"][:MAX_SHOWN]
+        self.body.controls=[
+            ft.Row([self.rb_input, ft.Button("Add", on_click=self._add_rumble, height=36)], spacing=8),
+            self.rb_msg,
+            ft.Row(chips,wrap=True,spacing=6,run_spacing=6),
+            ft.Container(height=8),
+            *([self._row(i) for i in items]
+              or [ft.Text("No videos yet. Add a channel above.", size=13, color=S)]),
+        ]
+
+    def _add_rumble(self,e):
+        text=(self.rb_input.value or "").strip()
+        if not text or self.adding:
+            return
+        self.adding=True
+        self.rb_msg.value="Looking up channel..."
+        self.rb_input.disabled=True
+        self._safe_update()
+
+        def work():
+            try:
+                ch=rb.add_channel(text)
+                self.rb_msg.value,self.rb_input.value=f"Added {ch['name']}",""
+            except Exception as ex:
+                self.rb_msg.value=f"Couldnt add channel: {ex}"
+            self.adding=False
+            self.rb_input.disabled=False
+            self._render()
+            self._safe_update()
+
+        self.page.run_thread(work)
+
+    def _remove_rumble(self,ch):
+        rb.remove_channel(ch["id"])
+        self._render()
+        self._safe_update()
+
