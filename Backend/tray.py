@@ -1,6 +1,5 @@
 import os
 import queue
-import subprocess
 import sys
 import threading
 import time
@@ -55,24 +54,40 @@ def _open_target(url):
     control.send("open")
 
 
-def _run_mac(parent_pid):
-    import rumps
+def _prepare_mac():
+    """Menu-bar-only agent (no Dock icon) that opts out of App Nap."""
+    try:
+        from Foundation import NSBundle, NSProcessInfo
+        info = NSBundle.mainBundle().infoDictionary()
+        if info is not None:
+            info["LSUIElement"] = "1"
+        # NSActivityUserInitiatedAllowingIdleSystemSleep
+        global _activity
+        _activity = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+            0x00FFFFFF & ~(1 << 20), "Notifio background notifications")
+    except Exception:
+        traceback.print_exc()
     try:
         from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
         NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     except Exception:
-        pass
+        traceback.print_exc()
+
+
+_activity = None
+
+
+def _run_mac(parent_pid):
+    _prepare_mac()
+    import rumps
+    toasts = None
+    try:
+        from toast import ToastManager
+        toasts = ToastManager(_icon(("icon.png", "tray.png")))
+    except Exception:
+        traceback.print_exc()
 
     pending = queue.Queue()
-
-    @rumps.notifications
-    def clicked(info):
-        data = getattr(info, "data", None) or info
-        try:
-            url = data.get("url")
-        except Exception:
-            url = None
-        _open_target(url)
 
     class Tray(rumps.App):
         def __init__(self):
@@ -80,7 +95,7 @@ def _run_mac(parent_pid):
             self.parent_pid = parent_pid
             self._last = -1
             self._misses = 0
-            self.server = control.Server({"notify": pending.put}, target="tray")
+            self.server = control.Server({"notify": pending.put, "ping": lambda: None}, target="tray")
             self.missed = rumps.MenuItem("No missed notifications", callback=self._open)
             self.menu = [
                 rumps.MenuItem("Open Notifio", callback=self._open),
@@ -95,22 +110,30 @@ def _run_mac(parent_pid):
             rumps.quit_application()
 
         def _tick(self, _):
-            if not _alive(self.parent_pid):
-                self._exit()
-                return
-            if control.send("ping"):
-                self._misses = 0
-            else:
-                self._misses += 1
-                if self._misses >= 5:
+            try:
+                if not _alive(self.parent_pid):
                     self._exit()
                     return
-            n = control.get_missed()
-            if n != self._last:
-                self._last = n
-                self.missed.title = _missed_text(n)
+                if control.send("ping"):
+                    self._misses = 0
+                else:
+                    self._misses += 1
+                    if self._misses >= 5:
+                        self._exit()
+                        return
+                n = control.get_missed()
+                if n != self._last:
+                    self._last = n
+                    self.missed.title = _missed_text(n)
+            except Exception:
+                traceback.print_exc()
 
         def _drain(self, _):
+            if toasts:
+                try:
+                    toasts.tick()
+                except Exception:
+                    traceback.print_exc()
             while True:
                 try:
                     item = pending.get_nowait()
@@ -118,22 +141,20 @@ def _run_mac(parent_pid):
                     return
                 title = item.get("title") or "Notifio"
                 body = item.get("body") or ""
+                url = item.get("url") or ""
                 try:
-                    rumps.notification(title=title, subtitle="", message=body,
-                                       data={"url": item.get("url") or ""}, sound=False)
+                    if toasts is None:
+                        raise RuntimeError("toast unavailable")
+                    toasts.show(title, body, lambda url=url: _open_target(url))
                 except Exception:
                     traceback.print_exc()
-                    try:
-                        esc = lambda s: str(s).replace("\\", "\\\\").replace('"', '\\"')
-                        subprocess.run(["osascript", "-e",
-                                        f'display notification "{esc(body)}" with title "{esc(title)}"'],
-                                       check=False, timeout=5)
+                    try:  # last resort: native banner (only works from a signed .app)
+                        rumps.notification(title=title, subtitle="", message=body, sound=False)
                     except Exception:
-                        pass
+                        traceback.print_exc()
 
         def _open(self, _):
-            if not control.send("open"):
-                rumps.notification("Notifio", "", "Couldn't reach the app. Try relaunching it.")
+            control.send("open")
 
         def _recheck(self, _):
             control.send("recheck")
@@ -143,8 +164,10 @@ def _run_mac(parent_pid):
             self._exit()
 
     app = Tray()
-    rumps.Timer(app._tick, 2).start()
-    rumps.Timer(app._drain, 0.5).start()
+    # keep references: rumps timers stop if they are garbage collected
+    app._timers = [rumps.Timer(app._tick, 2), rumps.Timer(app._drain, 0.4)]
+    for t in app._timers:
+        t.start()
     app.run()
 
 

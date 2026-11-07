@@ -67,8 +67,10 @@ class Server:
                 pass
         self.sock = _new_socket()
         self.sock.bind(self.address)
+        self._inode = None
         if not WINDOWS:
             os.chmod(self.address, 0o600)
+            self._inode = os.stat(self.address).st_ino
         self.sock.listen(4)
         threading.Thread(target=self._serve, daemon=True).start()
 
@@ -98,7 +100,13 @@ class Server:
     def close(self):
         try:
             self.sock.close()
-            if not WINDOWS:
-                os.unlink(self.address)
         except Exception:
             pass
+        if not WINDOWS:
+            # only remove the socket file if it is still ours (a newer
+            # instance may have replaced it)
+            try:
+                if os.stat(self.address).st_ino == self._inode:
+                    os.unlink(self.address)
+            except Exception:
+                pass

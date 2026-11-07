@@ -18,6 +18,7 @@ for d in (UI_DIR, BACKEND_DIR):
         sys.path.insert(0, str(d))
 
 import control
+import notifier
 from components import LoadingScreen, LandingScreen, HomeScreen
 from storage import save_user, get_data_dir, read_json, write_json
 from poller import Poller
@@ -63,12 +64,72 @@ def _log(text):
 
 
 _tray_proc = None
+_tray_lock = threading.Lock()
+_tray_wanted = True  # False once the user quits, so the watchdog stops respawning
+
+
+def tray_alive():
+    return bool(_tray_proc and _tray_proc.poll() is None)
+
+
+def prevent_app_nap():
+    """Stop macOS App Nap from delaying polling while hidden."""
+    if not MAC:
+        return
+    try:
+        from Foundation import NSProcessInfo
+        global _nap_token
+        _nap_token = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+            0x00FFFFFF & ~(1 << 20), "Notifio background polling")
+    except Exception:
+        _log("prevent_app_nap failed:\n" + traceback.format_exc())
+
+
+_nap_token = None
+
+
+def _descendant_pids(root):
+    """PIDs of all child processes of `root` (the Flet client window is one)."""
+    found, todo = set(), [root]
+    while todo:
+        cur = todo.pop()
+        try:
+            out = subprocess.run(["pgrep", "-P", str(cur)], capture_output=True,
+                                 text=True, timeout=2).stdout.split()
+        except Exception:
+            continue
+        for p in out:
+            if p.isdigit() and int(p) not in found:
+                found.add(int(p))
+                todo.append(int(p))
+    return found
+
+
+def activate_client_window():
+    """Activate the Flet window process (not Python's own NSApp, which steals the menu bar)."""
+    if not MAC:
+        return
+    try:
+        from AppKit import NSRunningApplication
+        skip = {_tray_proc.pid} if _tray_proc else set()
+        for pid in _descendant_pids(os.getpid()) - skip:
+            app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+            if app is not None:
+                app.activateWithOptions_(1 << 1)  # NSApplicationActivateIgnoringOtherApps
+    except Exception:
+        _log("activate_client_window failed:\n" + traceback.format_exc())
 
 
 def start_tray():
     global _tray_proc
-    if not (MAC or WINDOWS):
+    if not (MAC or WINDOWS) or not _tray_wanted:
         return
+    with _tray_lock:
+        _start_tray_locked()
+
+
+def _start_tray_locked():
+    global _tray_proc
     if _tray_proc and _tray_proc.poll() is None:
         return
     cmd = [sys.executable]
@@ -88,7 +149,8 @@ def start_tray():
 
 
 def stop_tray():
-    global _tray_proc
+    global _tray_proc, _tray_wanted
+    _tray_wanted = False
     if _tray_proc and _tray_proc.poll() is None:
         try:
             _tray_proc.terminate()
@@ -143,6 +205,15 @@ async def main(page: ft.Page):
         if time.time() - state["shown_at"] < 1.0:
             _log("hide ignored(just shown)")
             return
+        if (MAC or WINDOWS) and not tray_alive():
+            start_tray()
+            await asyncio.sleep(0.5)
+            if not tray_alive():
+                # never hide the only way to reach the app: minimise instead
+                _log("tray not running, minimising instead of hiding")
+                page.window.minimized = True
+                page.update()
+                return
         _log("hide window called")
         try:
             state["visible"] = False
@@ -163,11 +234,7 @@ async def main(page: ft.Page):
             page.update()
             await asyncio.sleep(0.2)
             if MAC:
-                try:
-                    from AppKit import NSApplication
-                    NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-                except Exception:
-                    _log("activate failed:\n" + traceback.format_exc())
+                await asyncio.to_thread(activate_client_window)
             try:
                 await page.window.to_front()
             except Exception:
@@ -211,7 +278,20 @@ async def main(page: ft.Page):
         "quit": threadsafe(quit_app),
         "ping": lambda: None,
     })
+    notifier.tray_starter = start_tray
+    prevent_app_nap()
     start_tray()
+
+    async def tray_watchdog():
+        # if the tray process ever dies, bring it back (it is the only way to
+        # reach the app while the window is hidden)
+        while _tray_wanted and (MAC or WINDOWS):
+            await asyncio.sleep(5)
+            if _tray_wanted and not tray_alive():
+                _log("tray process not running, restarting")
+                start_tray()
+
+    page.run_task(tray_watchdog)
 
     def open_home(data: dict):
         stop_poller()

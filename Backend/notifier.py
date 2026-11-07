@@ -1,16 +1,15 @@
 import os
-import subprocess
 import sys
+import time
+import traceback
 from pathlib import Path
 import control
 import sound
 
 WINDOWS = sys.platform.startswith("win")
 
-
-def _esc(text):
-    t = str(text).replace("\\", "\\\\").replace('"', '\\"')
-    return t.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+# Set by the UI: a callable that (re)starts the tray process on macOS.
+tray_starter = None
 
 
 def _plain(text):
@@ -28,16 +27,22 @@ def _icon():
 
 
 def _mac(title, body, url):
-    if control.send("notify", {"title": str(title), "body": str(body), "url": url or ""}, target="tray"):
-        return
-    script = f'''
-    try
-        tell application "Notifio" to display notification "{_esc(body)}" with title "{_esc(title)}"
-    on error
-        tell application "System Events" to display notification "{_esc(body)}" with title "{_esc(title)}"
-    end try
-    '''
-    subprocess.run(["osascript", "-e", script], check=False, timeout=5)
+    """Hand the notification to the tray process, which shows a clickable
+    banner (see toast.py). Clicking it opens `url` in the browser."""
+    payload = {"title": str(title), "body": str(body), "url": url or ""}
+    if control.send("notify", payload, target="tray"):
+        return True
+    # tray died or hasn't finished starting: (re)start it and retry for a few seconds
+    if tray_starter:
+        try:
+            tray_starter()
+        except Exception:
+            traceback.print_exc()
+    for _ in range(12):
+        time.sleep(0.5)
+        if control.send("notify", payload, target="tray"):
+            return True
+    return False
 
 
 def _windows(title, body, url):
@@ -62,8 +67,9 @@ def send(title, body="", url=None):
     try:
         sound.alert()
         if sys.platform == "darwin":
-            _mac(title, body, url)
+            if not _mac(title, body, url):
+                print("notifier: tray unreachable, notification dropped:", title, flush=True)
         elif WINDOWS:
             _windows(title, body, url)
     except Exception:
-        pass
+        traceback.print_exc()
