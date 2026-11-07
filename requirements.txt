@@ -3,6 +3,8 @@ pyinstaller>=6.0.0
 Pillow>=10.0.0
 certifi
 curl_cffi
-rumps; sys_platform == "darwin"
+pyobjc-core; sys_platform == "darwin"
+pyobjc-framework-Cocoa; sys_platform == "darwin"
+pyobjc-framework-UserNotifications; sys_platform == "darwin"
 winotify; sys_platform == "win32"
 pystray; sys_platform == "win32"

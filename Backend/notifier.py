@@ -1,16 +1,11 @@
 import os
-import subprocess
 import sys
+import traceback
 from pathlib import Path
 import control
 import sound
 
 WINDOWS = sys.platform.startswith("win")
-
-
-def _esc(text):
-    t = str(text).replace("\\", "\\\\").replace('"', '\\"')
-    return t.replace("\n", " ").replace("\r", " ").replace("\t", " ")
 
 
 def _plain(text):
@@ -28,21 +23,30 @@ def _icon():
 
 
 def _mac(title, body, url):
-    if control.send("notify", {"title": str(title), "body": str(body), "url": url or ""}, target="tray"):
+    """Post a macOS notification without Script Editor ever being involved.
+
+    Preferred route: hand it to the tray helper process, which posts it with
+    UNUserNotificationCenter. The toast is attributed to the Notifio bundle and
+    clicking it opens the item's page (or the app window if there is no link).
+    """
+    args = {"title": str(title or "Notifio"), "body": str(body or ""), "url": url or ""}
+    if control.send("notify", args, target="tray"):
         return
-    script = f'''
-    try
-        tell application "Notifio" to display notification "{_esc(body)}" with title "{_esc(title)}"
-    on error
-        tell application "System Events" to display notification "{_esc(body)}" with title "{_esc(title)}"
-    end try
-    '''
-    subprocess.run(["osascript", "-e", script], check=False, timeout=5)
+    # No osascript fallback on purpose: macOS attributes those toasts to
+    # Script Editor/Terminal and clicking them opens that app instead of the
+    # item page. If the tray is not up yet, drop the toast rather than show a
+    # misleading one.
+    print("notifier: tray helper not reachable, notification dropped", file=sys.stderr)
 
 
 def _windows(title, body, url):
     from winotify import Notification, audio
-    options = {"app_id": "Notifio", "title": _plain(title) or "Notifio", "msg": _plain(body) or " ", "duration": "short"}
+    options = {
+        "app_id": "Notifio",
+        "title": _plain(title) or "Notifio",
+        "msg": _plain(body) or " ",
+        "duration": "short",
+    }
     icon = _icon()
     if icon:
         options["icon"] = icon
@@ -51,7 +55,6 @@ def _windows(title, body, url):
             toast = Notification(**options, launch=url)
         except TypeError:
             toast = Notification(**options)
-            toast.add_actions(label="Open", launch=url)
     else:
         toast = Notification(**options)
     toast.set_audio(audio.Silent, loop=False)
@@ -59,11 +62,15 @@ def _windows(title, body, url):
 
 
 def send(title, body="", url=None):
+    """Send a notification. Never raises."""
     try:
         sound.alert()
+    except Exception:
+        traceback.print_exc()
+    try:
         if sys.platform == "darwin":
             _mac(title, body, url)
         elif WINDOWS:
             _windows(title, body, url)
     except Exception:
-        pass
+        traceback.print_exc()

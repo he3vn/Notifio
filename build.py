@@ -23,8 +23,44 @@ COMMON_HIDDEN = [
     "webbrowser",
 ]
 
-MAC_HIDDEN = ["rumps", "objc", "AppKit", "Foundation"]
+MAC_HIDDEN = ["AppKit", "Foundation", "UserNotifications", "objc"]
 WINDOWS_HIDDEN = ["winotify", "pystray", "pystray._win32", "ctypes", "winsound"]
+MAC_BUNDLE_ID = "com.notifio.app"
+
+
+def tune_mac_bundle(app_path: Path) -> None:
+    """Make the .app bundle provider-ready for native notifications.
+
+    UNUserNotificationCenter (the only API macOS still delivers with) needs a
+    CFBundleIdentifier plus NSUserNotificationsUsageDescription in Info.plist,
+    and the bundle must be re-signed after the plist changes.
+    """
+    import plistlib
+
+    plist = app_path / "Contents" / "Info.plist"
+    try:
+        data = plistlib.loads(plist.read_bytes()) if plist.exists() else {}
+        data["CFBundleIdentifier"] = MAC_BUNDLE_ID
+        data["CFBundleName"] = "Notifio"
+        data["CFBundleDisplayName"] = "Notifio"
+        # Menu-bar app: the Python host has no UI of its own (the Flet client
+        # owns the window), so keep it out of the Dock/Cmd+Tab entirely.
+        data["LSUIElement"] = True
+        data["NSUserNotificationsUsageDescription"] = (
+            "Notifio shows pop-ups when creators you follow upload or go live."
+        )
+        plist.write_bytes(plistlib.dumps(data))
+    except Exception as exc:
+        print(f"Warning: could not update {plist}: {exc}")
+        return
+    res = subprocess.run(
+        ["codesign", "--force", "--deep", "--sign", "-", str(app_path)],
+        capture_output=True, text=True,
+    )
+    if res.returncode != 0:
+        print("Warning: ad-hoc re-sign of Notifio.app failed:\n" + res.stderr)
+    else:
+        print("==> Info.plist tuned for notifications, app re-signed")
 
 
 def discover_modules(folder: Path, base: Path) -> list[str]:
@@ -61,6 +97,7 @@ def package_mac(dist_dir: Path) -> Path:
     if not app_path.exists():
         print("Build finished but dist/Notifio.app was not created.")
         sys.exit(1)
+    tune_mac_bundle(app_path)
     if zip_path.exists():
         zip_path.unlink()
     subprocess.run(
@@ -128,6 +165,8 @@ def build():
     else:
         print("Note: this flet version has no --pyinstaller-build-args; "
               "relying on hidden imports for curl_cffi.")
+    if MAC and flet_supports("--bundle-id"):
+        extra_args += ["--bundle-id", MAC_BUNDLE_ID]
 
     sep = os.pathsep
     cmd = [

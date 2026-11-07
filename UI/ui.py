@@ -62,7 +62,64 @@ def _log(text):
         pass
 
 
+import atexit
+atexit.register(lambda: _log("python exiting"))
+
 _tray_proc = None
+
+
+def _flet_client_pid():
+    """PID of the Flet desktop client window process for this app.
+
+    The client is launched by flet_desktop with our assets dir as its last
+    argument, so that string uniquely identifies our window process (there
+    can be other Flet apps running on the machine).
+    """
+    if not MAC:
+        return None
+    try:
+        out = subprocess.run(
+            ["ps", "-axo", "pid=,command="], capture_output=True, text=True, timeout=3
+        ).stdout
+    except Exception:
+        return None
+    marker = str(ASSETS_DIR)
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        pid_text, _, cmd = line.partition(" ")
+        if "Flet.app/Contents/MacOS/Flet" in cmd and marker in cmd:
+            try:
+                return int(pid_text)
+            except ValueError:
+                continue
+    return None
+
+
+def _mac_client_app():
+    if not MAC:
+        return None
+    pid = _flet_client_pid()
+    if not pid:
+        return None
+    try:
+        from AppKit import NSRunningApplication
+        return NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+    except Exception:
+        return None
+
+
+def _activate_client():
+    """Bring the Flet window process to the front (the Python process has no UI)."""
+    if not MAC:
+        return
+    try:
+        app = _mac_client_app()
+        if app is not None:
+            app.activateWithOptions_(1)  # NSApplicationActivateIgnoringOtherApps
+    except Exception:
+        _log("activate client failed:\n" + traceback.format_exc())
 
 
 def start_tray():
@@ -71,9 +128,21 @@ def start_tray():
         return
     if _tray_proc and _tray_proc.poll() is None:
         return
-    cmd = [sys.executable]
-    if not getattr(sys, "frozen", False):
-        cmd.append(str(PROJECT_DIR / "main.py"))
+    # Dev mode (not frozen): don't run the tray under raw python. macOS ties
+    # notification permission to the bundle id, and python's bundle
+    # (org.python.python) is permanently denied with no reset path on modern
+    # macOS — notifications from it never appear (silently, or via Script
+    # Editor). Instead, spawn the built Notifio binary as the tray helper so
+    # notifications are attributed to the real app and can be allowed once.
+    cmd = None
+    if not getattr(sys, "frozen", False) and MAC:
+        built = PROJECT_DIR / "dist" / "Notifio.app" / "Contents" / "MacOS" / "Notifio"
+        if built.is_file():
+            cmd = [str(built)]
+    if cmd is None:
+        cmd = [sys.executable]
+        if not getattr(sys, "frozen", False):
+            cmd.append(str(PROJECT_DIR / "main.py"))
     cmd += ["--tray", str(os.getpid())]
     env = {**os.environ, "FLET_APP_STORAGE_DATA": str(get_data_dir())}
     options = {}
@@ -116,22 +185,55 @@ async def main(page: ft.Page):
         page.window.width, page.window.height = 1280, 800
         page.window.min_width, page.window.min_height = 500, 520
         page.window.title_bar_hidden = MAC
+        if MAC:
+            # Menu-bar app: no Dock tile. Must be set before the window is
+            # first shown — runtime changes to this property are ignored by
+            # the Flet client. This is what makes closing the window leave
+            # no icon in the Dock while the tray keeps the app alive.
+            page.window.skip_task_bar = True
 
     root = ft.Container(expand=True)
     page.add(root)
 
     poller_ref = {"p": None}
+    home_ref = {"h": None}
 
     def stop_poller():
         if poller_ref["p"]:
             poller_ref["p"].stop()
             poller_ref["p"] = None
 
+    async def pause_media():
+        h = home_ref["h"]
+        if h:
+            try:
+                await h.pause_media()
+            except Exception:
+                _log("pause_media failed:\n" + traceback.format_exc())
+
+    async def play_media():
+        h = home_ref["h"]
+        if h:
+            try:
+                await h.play_media()
+            except Exception:
+                _log("play_media failed:\n" + traceback.format_exc())
+
+    def drop_media():
+        h = home_ref["h"]
+        if h:
+            try:
+                h.drop_media()
+            except Exception:
+                _log("drop_media failed:\n" + traceback.format_exc())
+
     state = {"visible": True, "catchup": True, "shown_at": 0.0}
     page.window.prevent_close = True
     loop = asyncio.get_running_loop()
 
     def set_taskbar_hidden(hidden):
+        if not WINDOWS:
+            return
         try:
             page.window.skip_task_bar = hidden
         except Exception:
@@ -146,8 +248,16 @@ async def main(page: ft.Page):
         _log("hide window called")
         try:
             state["visible"] = False
+            # Pause playback while hidden — never tear the player down here,
+            # that teardown racing the window-hide is what crashes mpv.
+            await pause_media()
             set_taskbar_hidden(True)
-            page.window.visible = False
+            # Never use `visible = False` here: in flet 1.1.0 hiding the last
+            # window makes the desktop client quit, which kills the poller and
+            # tears down mpv mid-playback (SIGSEGV in the Mpv core thread).
+            # Minimizing keeps the client, tray and background polling alive
+            # while taking the window off screen.
+            page.window.minimized = True
             page.update()
         except Exception:
             _log("hide_window failed:\n" + traceback.format_exc())
@@ -158,28 +268,30 @@ async def main(page: ft.Page):
             state["shown_at"] = time.time()
             state["visible"] = True
             set_taskbar_hidden(False)
-            page.window.visible = True
             page.window.minimized = False
             page.update()
             await asyncio.sleep(0.2)
-            if MAC:
-                try:
-                    from AppKit import NSApplication
-                    NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-                except Exception:
-                    _log("activate failed:\n" + traceback.format_exc())
+            _activate_client()
             try:
                 await page.window.to_front()
             except Exception:
                 _log("to_front failed:\n" + traceback.format_exc())
+            await play_media()
             control.clear_missed()
             _log("show_window done")
         except Exception:
             _log("show_window failed:\n" + traceback.format_exc())
 
     async def quit_app():
-        threading.Timer(2.5, lambda: os._exit(0)).start()
+        threading.Timer(5.0, lambda: os._exit(0)).start()
         stop_poller()
+        # Media teardown must be slow and serialized, or mpv segfaults the
+        # client: pause first, let it settle, THEN drop the widget, let that
+        # settle, and only then tear down the window/platform.
+        await pause_media()
+        await asyncio.sleep(1.0)
+        drop_media()
+        await asyncio.sleep(2.0)
         server.close()
         stop_tray()
         try:
@@ -194,6 +306,14 @@ async def main(page: ft.Page):
 
     page.window.on_event = on_window_event
 
+    def on_disconnect(e):
+        _log("page disconnected")
+
+    try:
+        page.on_disconnect = on_disconnect
+    except Exception:
+        _log("on_disconnect not supported")
+
     def threadsafe(coro_fn):
         def runner():
             _log(f"command received: {coro_fn.__name__}")
@@ -207,6 +327,7 @@ async def main(page: ft.Page):
 
     server = control.Server({
         "open": threadsafe(show_window),
+        "hide": threadsafe(hide_window),
         "recheck": do_recheck,
         "quit": threadsafe(quit_app),
         "ping": lambda: None,
@@ -240,12 +361,14 @@ async def main(page: ft.Page):
 
         home.on_plugins_changed = plugins_changed
         home.on_settings = redo_setup
+        home_ref["h"] = home
         root.content = home
         page.update()
         start_poller(data.get("plugins", []))
 
     def redo_setup():
         stop_poller()
+        home_ref["h"] = None
         root.content = LandingScreen(page=page, on_finish=finish_setup)
         page.update()
 

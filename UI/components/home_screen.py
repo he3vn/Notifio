@@ -2,6 +2,7 @@ import asyncio
 import colorsys
 import subprocess
 import sys
+import traceback
 from datetime import datetime
 import flet as ft
 from pathlib import Path
@@ -69,6 +70,8 @@ class HomeScreen(ft.Container):
         self.adding = False
         self.nav_hover=False
         self.nav_items={}
+        bg = self._pref("bg_video", "")
+        self._bg_path = bg if ftv and bg and Path(bg).is_file() else ""
 
         self.title=ft.Text("Notifications",size=22,color=H,font_family="Inter-SemiBold",weight=ft.FontWeight.W_600)
         self.subtitle=ft.Text(f"Welcome back, {name}"if name else "",size=13,color=S)
@@ -196,15 +199,64 @@ class HomeScreen(ft.Container):
         return (load_user()or {}).get(k,d)
 
     def _bg(self):
-        p=self._pref("bg_video","")
-        if ftv and p and Path(p).is_file():
-                        return ftv.Video(playlist=[ftv.VideoMedia(p)],playlist_mode=ftv.PlaylistMode.LOOP,autoplay=True,muted=True,fit=ft.BoxFit.COVER,expand=True)
+        if ftv and self._bg_path and Path(self._bg_path).is_file():
+            return ftv.Video(playlist=[ftv.VideoMedia(self._bg_path)],playlist_mode=ftv.PlaylistMode.LOOP,autoplay=True,muted=True,fit=ft.BoxFit.COVER,expand=True)
+        return self._image_bg()
+
+    def _image_bg(self):
         return ft.Image(src=str(BG_IMAGE),fit=ft.BoxFit.COVER,expand=True,gapless_playback=True) if BG_IMAGE.is_file() else ft.Container()
 
     def _set_bg(self,p):
         save_user({"bg_video":p})
+        self._bg_path = p if ftv and p and Path(p).is_file() else ""
         self.wall.content=self._bg()
         self._tab("Background")
+
+    def _drop_media_player(self):
+        """Kick the mpv player out of the page.
+
+        The Flet client aborts (SIGABRT inside Mpv) when it tears down while a
+        video player is still running, so before the window hides or the app
+        quits we always swap the background video for the static image.
+        """
+        try:
+            if ftv and isinstance(self.wall.content, ftv.Video):
+                self.wall.content = self._image_bg()
+                self._safe_update()
+        except Exception:
+            traceback.print_exc()
+
+    async def pause_media(self):
+        """Freeze playback while the window is hidden, keeping the player alive.
+
+        Tearing an mpv player down while it plays is what crashes flet's client
+        on macOS (SIGSEGV inside Mpv), so pause is as far as we go here.
+        """
+        try:
+            if ftv and isinstance(self.wall.content, ftv.Video):
+                await self.wall.content.pause()
+        except Exception:
+            traceback.print_exc()
+
+    async def play_media(self):
+        try:
+            if ftv and isinstance(self.wall.content, ftv.Video):
+                await self.wall.content.play()
+        except Exception:
+            traceback.print_exc()
+
+    def drop_media(self):
+        """Remove the video widget so its mpv player is released.
+
+        Only call this from the quit path, after a pause has had time to settle
+        and never right before another window operation.
+        """
+        try:
+            if ftv and isinstance(self.wall.content, ftv.Video):
+                self.wall.content = self._image_bg()
+                self._safe_update()
+        except Exception:
+            traceback.print_exc()
 
     def _pick_fallback(self,uti,prompt):
         if sys.platform!="darwin":

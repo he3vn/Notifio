@@ -28,7 +28,7 @@ def _play_windows(path):
         import ctypes
         mci = ctypes.windll.winmm.mciSendStringW
         mci("close notifio_alert", None, 0, 0)
-        if mci(f'open "{path}" alias notifio_alert',None,0,0):
+        if mci(f'open "{path}" alias notifio_alert',None,0,0)==0:
             mci("play notifio_alert",None,0,0)
             return
     import winsound
@@ -53,5 +53,5 @@ def alert(force=False):
             return
         _last=now
     threading.Thread(target=_run, args=(_sound_path(),), daemon=True).start()
-    
+
     

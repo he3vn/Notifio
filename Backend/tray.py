@@ -2,9 +2,9 @@ import os
 import queue
 import subprocess
 import sys
-import threading
 import time
 import traceback
+import uuid
 import webbrowser
 from pathlib import Path
 import control
@@ -22,16 +22,6 @@ def _icon(names):
 
 
 def _alive(pid):
-    if WINDOWS:
-        import ctypes
-        kernel = ctypes.windll.kernel32
-        handle = kernel.OpenProcess(0x1000, False, pid)
-        if not handle:
-            return False
-        code = ctypes.c_ulong()
-        ok = kernel.GetExitCodeProcess(handle, ctypes.byref(code))
-        kernel.CloseHandle(handle)
-        return bool(ok) and code.value == 259
     try:
         os.kill(pid, 0)
         return True
@@ -45,123 +35,262 @@ def _missed_text(n):
     return "No missed notifications" if n == 0 else f"{n} missed notification{'s' if n != 1 else ''}"
 
 
-def _open_target(url):
-    if url:
-        try:
+def run(parent_pid):
+    """Runs the menu-bar helper.
+
+    It must never crash the app: every platform API call is wrapped, and the
+    process only ever exits through os._exit() from its own watchdog, so the
+    tray stays up while the app window is hidden and dies when the app quits.
+    """
+    if WINDOWS:
+        _run_windows(parent_pid)
+    else:
+        _run_mac(parent_pid)
+
+
+# --------------------------------------------------------------------------
+# macOS: NSStatusItem + UNUserNotificationCenter (no rumps, no Script Editor)
+# --------------------------------------------------------------------------
+def _open(url):
+    """Click action for a notification: go to the item's own page."""
+    try:
+        if url:
             webbrowser.open(url)
-            return
-        except Exception:
-            traceback.print_exc()
-    control.send("open")
+        else:
+            control.send("open")
+    except Exception:
+        traceback.print_exc()
 
 
 def _run_mac(parent_pid):
-    import rumps
-    try:
-        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
-        NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-    except Exception:
-        pass
+    from AppKit import (NSApplication, NSApplicationActivationPolicyAccessory,
+                        NSImage, NSMenu, NSMenuItem, NSStatusBar,
+                        NSVariableStatusItemLength)
+    from Foundation import NSTimer, NSObject
 
-    pending = queue.Queue()
+    app = NSApplication.sharedApplication()
+    app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
-    @rumps.notifications
-    def clicked(info):
-        data = getattr(info, "data", None) or info
+    pending = queue.Queue()          # notifications waiting to be posted
+    urls = {}                        # notification id -> click URL
+    state = {"post": None, "misses": 0, "last": -1, "alive": True}
+    missed_item = None               # set once the menu is built
+
+    # ---- notification posters ----
+    def make_un_post():
         try:
-            url = data.get("url")
+            from UserNotifications import (UNAuthorizationOptionAlert,
+                                           UNMutableNotificationContent,
+                                           UNNotificationRequest,
+                                           UNUserNotificationCenter)
+            center = UNUserNotificationCenter.currentNotificationCenter()
         except Exception:
-            url = None
-        _open_target(url)
+            traceback.print_exc()
+            return None
 
-    class Tray(rumps.App):
-        def __init__(self):
-            super().__init__("Notifio", icon=_icon(("tray.png", "icon.png")), template=False, quit_button=None)
-            self.parent_pid = parent_pid
-            self._last = -1
-            self._misses = 0
-            self.server = control.Server({"notify": pending.put}, target="tray")
-            self.missed = rumps.MenuItem("No missed notifications", callback=self._open)
-            self.menu = [
-                rumps.MenuItem("Open Notifio", callback=self._open),
-                self.missed,
-                rumps.MenuItem("Recheck now", callback=self._recheck),
-                None,
-                rumps.MenuItem("Quit Notifio", callback=self._quit),
-            ]
+        status = {"granted": None}
 
-        def _exit(self):
-            self.server.close()
-            rumps.quit_application()
+        class CenterDelegate(NSObject):
+            def userNotificationCenter_willPresentNotification_withCompletionHandler_(
+                    self, center_, notification, handler):
+                try:
+                    from UserNotifications import (UNNotificationPresentationOptionBanner,
+                                                   UNNotificationPresentationOptionList)
+                    handler(int(UNNotificationPresentationOptionList | UNNotificationPresentationOptionBanner))
+                except Exception:
+                    try:
+                        handler(0)
+                    except Exception:
+                        pass
+                return None
 
-        def _tick(self, _):
-            if not _alive(self.parent_pid):
-                self._exit()
-                return
-            if control.send("ping"):
-                self._misses = 0
-            else:
-                self._misses += 1
-                if self._misses >= 5:
-                    self._exit()
-                    return
-            n = control.get_missed()
-            if n != self._last:
-                self._last = n
-                self.missed.title = _missed_text(n)
+            def userNotificationCenter_didReceiveNotificationResponse_withCompletionHandler_(
+                    self, center_, response, handler):
+                url = ""
+                try:
+                    ident = response.notification().request().identifier()
+                    url = urls.get(ident, "") or ""
+                except Exception:
+                    traceback.print_exc()
+                handler()
+                _open(url)
+                return None
 
-        def _drain(self, _):
+        try:
+            center.setDelegate_(CenterDelegate.alloc().init())
+        except Exception:
+            traceback.print_exc()
+
+        def auth_handler(granted, error):
+            status["granted"] = bool(granted)
+
+        try:
+            center.requestAuthorizationWithOptions_completionHandler_(
+                UNAuthorizationOptionAlert, auth_handler)
+        except Exception:
+            traceback.print_exc()
+
+        def post(title, body, url):
+            # When macOS says denied (e.g. running as bare python), raise so
+            # the chain falls back to the next poster instead of eating toasts.
+            if status["granted"] is False:
+                raise PermissionError("notification permission denied")
+            ident = uuid.uuid4().hex
+            urls[ident] = url or ""
+            if len(urls) > 200:
+                for k in list(urls)[:len(urls) - 200]:
+                    urls.pop(k, None)
+            content = UNMutableNotificationContent.alloc().init()
+            content.setTitle_(str(title or "Notifio"))
+            content.setBody_(str(body or ""))
+            request = UNNotificationRequest.requestWithIdentifier_content_trigger_(ident, content, None)
+            center.addNotificationRequest_withCompletionHandler_(request, None)
+
+        return post
+
+    un_post = make_un_post()
+
+    def post_any(title, body, url=""):
+        # Only UNUserNotificationCenter: it is the one macOS still delivers,
+        # and it attributes the toast to Notifio. osascript toasts were removed
+        # on purpose — macOS attributes them to Script Editor/Terminal and a
+        # click opens that editor instead of the item page.
+        if un_post is None:
+            print("tray: UserNotifications unavailable, notification dropped",
+                  file=sys.stderr)
+            return
+        try:
+            un_post(title, body, url)
+        except Exception:
+            print("tray: notification not posted (permission denied?)",
+                  file=sys.stderr)
+            traceback.print_exc()
+
+    state["post"] = post_any
+
+    # ---- status item & menu ----
+    class TrayActions(NSObject):
+        def open_(self, sender):
+            if not control.send("open"):
+                try:
+                    state["post"]("Notifio", "Couldn't reach the app. Try relaunching it.", "")
+                except Exception:
+                    traceback.print_exc()
+
+        def recheck_(self, sender):
+            control.send("recheck")
+
+        def quit_(self, sender):
+            try:
+                control.send("quit")
+            except Exception:
+                traceback.print_exc()
+            os._exit(0)
+
+        def tick_(self, timer):
+            try:
+                if not _alive(parent_pid):
+                    os._exit(0)
+                if control.send("ping", timeout=1.0):
+                    state["misses"] = 0
+                else:
+                    state["misses"] += 1
+                    if state["misses"] >= 5:
+                        os._exit(0)
+                        return
+                n = control.get_missed()
+                if n != state["last"]:
+                    state["last"] = n
+                    if missed_item is not None:
+                        missed_item.setTitle_(_missed_text(n))
+            except Exception:
+                traceback.print_exc()
+
+        def drain_(self, timer):
             while True:
                 try:
                     item = pending.get_nowait()
                 except queue.Empty:
                     return
-                title = item.get("title") or "Notifio"
-                body = item.get("body") or ""
                 try:
-                    rumps.notification(title=title, subtitle="", message=body,
-                                       data={"url": item.get("url") or ""}, sound=False)
+                    state["post"](item.get("title") or "Notifio",
+                                  item.get("body") or "",
+                                  item.get("url") or "")
                 except Exception:
                     traceback.print_exc()
-                    try:
-                        esc = lambda s: str(s).replace("\\", "\\\\").replace('"', '\\"')
-                        subprocess.run(["osascript", "-e",
-                                        f'display notification "{esc(body)}" with title "{esc(title)}"'],
-                                       check=False, timeout=5)
-                    except Exception:
-                        pass
 
-        def _open(self, _):
-            if not control.send("open"):
-                rumps.notification("Notifio", "", "Couldn't reach the app. Try relaunching it.")
+    class TrayAppDelegate(NSObject):
+        def applicationShouldTerminate_(self, sender):
+            return 0  # the tray only exits on its own terms
 
-        def _recheck(self, _):
-            control.send("recheck")
+    actions = TrayActions.alloc().init()
+    app.setDelegate_(TrayAppDelegate.alloc().init())
 
-        def _quit(self, _):
-            control.send("quit")
-            self._exit()
+    try:
+        server = control.Server({"notify": pending.put}, target="tray")
+    except Exception:
+        traceback.print_exc()
+        server = None
 
-    app = Tray()
-    rumps.Timer(app._tick, 2).start()
-    rumps.Timer(app._drain, 0.5).start()
+    item = NSStatusBar.systemStatusBar().statusItemWithLength_(NSVariableStatusItemLength)
+    button = item.button()
+    try:
+        path = _icon(("tray.png", "icon.png"))
+        img = NSImage.alloc().initWithContentsOfFile_(path) if path else None
+        if img is not None:
+            img.setSize_((18.0, 18.0))
+            button.setImage_(img)
+        else:
+            button.setTitle_("N")
+    except Exception:
+        traceback.print_exc()
+        button.setTitle_("N")
+
+    menu = NSMenu.alloc().init()
+    menu.setAutoenablesItems_(False)
+
+    def add_item(title, action):
+        mi = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, action, "")
+        mi.setTarget_(actions)
+        mi.setEnabled_(True)
+        menu.addItem_(mi)
+        return mi
+
+    add_item("Open Notifio", "open:")
+    missed_item = add_item("No missed notifications", "open:")
+    add_item("Recheck now", "recheck:")
+    menu.addItem_(NSMenuItem.separatorItem())
+    add_item("Quit Notifio", "quit:")
+    item.setMenu_(menu)
+
+    NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(0.2, actions, "drain:", None, True)
+    NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(2.0, actions, "tick:", None, True)
     app.run()
+    # Should never be reached; keep the helper alive just in case.
+    while True:
+        time.sleep(3600)
 
 
+# --------------------------------------------------------------------------
+# Windows: pystray (works as-is with winotify doing the toasts)
+# --------------------------------------------------------------------------
 def _run_windows(parent_pid):
+    import threading
     import pystray
     from PIL import Image
 
     path = _icon(("tray.ico", "tray.png", "icon.png"))
     image = Image.open(path) if path else Image.new("RGBA", (64, 64), (94, 106, 210, 255))
 
-    def open_app(icon, item):
+    pending = queue.Queue()  # unused, kept for protocol parity with macOS
+
+    def open_app(icon=None, item=None):
         control.send("open")
 
-    def recheck(icon, item):
+    def recheck(icon=None, item=None):
         control.send("recheck")
 
-    def quit_app(icon, item):
+    def quit_app(icon=None, item=None):
         control.send("quit")
         icon.stop()
 
@@ -183,15 +312,13 @@ def _run_windows(parent_pid):
         while True:
             time.sleep(2)
             if not _alive(parent_pid):
-                icon.stop()
-                return
+                os._exit(0)
             if control.send("ping"):
                 misses = 0
             else:
                 misses += 1
                 if misses >= 5:
-                    icon.stop()
-                    return
+                    os._exit(0)
             n = control.get_missed()
             if n != last:
                 last = n
@@ -200,15 +327,8 @@ def _run_windows(parent_pid):
                 except Exception:
                     pass
 
-    def setup(icon):
-        icon.visible = True
+    def setup(icon_):
+        icon_.visible = True
         threading.Thread(target=watch, daemon=True).start()
 
     icon.run(setup)
-
-
-def run(parent_pid):
-    if WINDOWS:
-        _run_windows(parent_pid)
-    else:
-        _run_mac(parent_pid)
