@@ -22,6 +22,8 @@ from components import LoadingScreen, LandingScreen, HomeScreen
 from storage import save_user, get_data_dir, read_json, write_json
 from poller import Poller
 
+WINDOWS = sys.platform.startswith("win")
+MAC = sys.platform == "darwin"
 SETUP_FILE = get_data_dir() / "user_setup.json"
 
 
@@ -65,7 +67,7 @@ _tray_proc = None
 
 def start_tray():
     global _tray_proc
-    if sys.platform != "darwin":
+    if not (MAC or WINDOWS):
         return
     if _tray_proc and _tray_proc.poll() is None:
         return
@@ -74,10 +76,13 @@ def start_tray():
         cmd.append(str(PROJECT_DIR / "main.py"))
     cmd += ["--tray", str(os.getpid())]
     env = {**os.environ, "FLET_APP_STORAGE_DATA": str(get_data_dir())}
+    options = {}
+    if WINDOWS:
+        options["creationflags"] = subprocess.CREATE_NO_WINDOW
     try:
         log = open(get_data_dir() / "tray.log", "ab")
         _tray_proc = subprocess.Popen(cmd, env=env, stdin=subprocess.DEVNULL,
-                                      stdout=log, stderr=log)
+                                      stdout=log, stderr=log, **options)
     except Exception:
         traceback.print_exc()
 
@@ -110,7 +115,7 @@ async def main(page: ft.Page):
     if hasattr(page, "window") and page.window:
         page.window.width, page.window.height = 1280, 800
         page.window.min_width, page.window.min_height = 500, 520
-        page.window.title_bar_hidden = True
+        page.window.title_bar_hidden = MAC
 
     root = ft.Container(expand=True)
     page.add(root)
@@ -126,6 +131,12 @@ async def main(page: ft.Page):
     page.window.prevent_close = True
     loop = asyncio.get_running_loop()
 
+    def set_taskbar_hidden(hidden):
+        try:
+            page.window.skip_task_bar = hidden
+        except Exception:
+            _log("skip_task_bar failed:\n" + traceback.format_exc())
+
     async def hide_window():
         if not state["visible"]:
             return
@@ -135,6 +146,7 @@ async def main(page: ft.Page):
         _log("hide window called")
         try:
             state["visible"] = False
+            set_taskbar_hidden(True)
             page.window.visible = False
             page.update()
         except Exception:
@@ -145,15 +157,17 @@ async def main(page: ft.Page):
         try:
             state["shown_at"] = time.time()
             state["visible"] = True
+            set_taskbar_hidden(False)
             page.window.visible = True
             page.window.minimized = False
             page.update()
             await asyncio.sleep(0.2)
-            try:
-                from AppKit import NSApplication
-                NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-            except Exception:
-                _log("activate failed:\n" + traceback.format_exc())
+            if MAC:
+                try:
+                    from AppKit import NSApplication
+                    NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+                except Exception:
+                    _log("activate failed:\n" + traceback.format_exc())
             try:
                 await page.window.to_front()
             except Exception:

@@ -2,5 +2,7 @@ flet>=1.0.4
 pyinstaller>=6.0.0
 Pillow>=10.0.0
 certifi
-rumps
 curl_cffi
+rumps; sys_platform == "darwin"
+winotify; sys_platform == "win32"
+pystray; sys_platform == "win32"

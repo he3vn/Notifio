@@ -1,10 +1,13 @@
 import asyncio
 import colorsys
 import subprocess
+import sys
 from datetime import datetime
 import flet as ft
 from pathlib import Path
 import notifications
+import app_settings
+import sound
 from dexerto.feeds import FEEDS, ago
 from storage import save_user,load_user
 from .plugins import TOP, BOTTOM
@@ -203,18 +206,39 @@ class HomeScreen(ft.Container):
         self.wall.content=self._bg()
         self._tab("Background")
 
+    def _pick_fallback(self,uti,prompt):
+        if sys.platform!="darwin":
+            return ""
+        r=subprocess.run(["osascript","-e",f'POSIX path of (choose file of type {{"{uti}"}} with prompt "{prompt}")'],capture_output=True,text=True)
+        return r.stdout.strip()
+
     async def _pick(self,e):
         try:
             f=await ft.FilePicker().pick_files(file_type=ft.FilePickerFileType.CUSTOM,allowed_extensions=["mp4"],allow_multiple=False)
             p=f[0].path if f else None
         except Exception:
-            r=await asyncio.to_thread(subprocess.run,["osascript","-e",'POSIX path of (choose file of type {"public.mpeg-4"} with prompt "Select MP4")'],capture_output=True,text=True)
-            p=r.stdout.strip()
+            p=await asyncio.to_thread(self._pick_fallback,"public.mpeg-4","Select MP4")
         if p:
             self._set_bg(p)
 
+    async def _pick_sound(self,e):
+        try:
+            f=await ft.FilePicker().pick_files(file_type=ft.FilePickerFileType.CUSTOM,allowed_extensions=["mp3"],allow_multiple=False)
+            p=f[0].path if f else None
+        except Exception:
+            p=await asyncio.to_thread(self._pick_fallback,"public.mp3","Select MP3")
+        if p:
+            stored=app_settings.store_sound(p)
+            if stored:
+                app_settings.set_value("sound_file",stored)
+                self._tab("Sound")
+
+    def _reset_sound(self,e):
+        app_settings.set_value("sound_file","")
+        self._tab("Sound")
+
     def _tab(self,k):
-        panes={"Setup":self._p_setup,"Background":self._p_bg,"Theme":self._p_theme}
+        panes={"Setup":self._p_setup,"Background":self._p_bg,"Theme":self._p_theme,"Sound":self._p_sound}
         self.tabcol.controls=[ft.Container(content=ft.Text(t,size=13,color=H if t==k else S,font_family="Inter-Medium"),padding=ft.Padding(12,9,12,9),border_radius=10,bgcolor="#1c1d20" if t==k else None,on_click=lambda e,t=t:self._tab(t)) for t in panes]
         self.pane.content=panes[k]()
         self._safe_update()
@@ -226,6 +250,19 @@ class HomeScreen(ft.Container):
         p=self._pref("bg_video","") or str(BG_VIDEO)
         self.bg_msg=ft.Text("Run: pip install flet-video" if p and not ftv else Path(p).name or "Default",size=12,color=S)
         return ft.Column([ft.Button("Choose MP4",on_click=self._pick,height=38,style=BTN),ft.Button("Use default",on_click=lambda e:self._set_bg(""),height=38,style=BTN),self.bg_msg],spacing=12)
+
+    def _p_sound(self):
+        def toggle(e):
+            app_settings.set_value("sound",bool(e.control.value))
+        name=Path(app_settings.get("sound_file") or "").name or "Default sound"
+        switch=ft.Switch(label="Play sound",value=bool(app_settings.get("sound")),on_change=toggle)
+        return ft.Column([
+            switch,
+            ft.Button("Choose MP3",on_click=self._pick_sound,height=38,style=BTN),
+            ft.Button("Use default",on_click=self._reset_sound,height=38,style=BTN),
+            ft.Button("Test sound",on_click=lambda e:sound.alert(force=True),height=38,style=BTN),
+            ft.Text(name,size=12,color=S),
+        ],spacing=10)
     
     def _p_theme(self):
         def apply(e):

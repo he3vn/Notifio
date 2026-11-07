@@ -1,4 +1,3 @@
-"""User customization settings (theme, behavior) and avatar storage."""
 import shutil
 import threading
 import time
@@ -16,6 +15,7 @@ DEFAULTS = {
     "poll_interval": 30,
     "notifications": True,
     "sound": True,
+    "sound_file": "",
     "group_after": 3,
     "close_to_tray": True,
 }
@@ -41,6 +41,8 @@ def _sanitize(data):
             if isinstance(value, bool) or value not in CHOICES[key]:
                 value = default
         elif isinstance(default, bool) and not isinstance(value, bool):
+            value = default
+        elif isinstance(default, str) and not isinstance(value, str):
             value = default
         out[key] = value
     return out
@@ -82,13 +84,11 @@ def set_value(key, value):
 
 
 def reset():
-    """Back to the original customization. Profile and plugins are untouched."""
     with LOCK:
         return _write(dict(DEFAULTS))
 
 
-def store_avatar(path):
-    """Copy a picked picture into the app data dir so it survives the original moving."""
+def _store(path, prefix, default_suffix):
     if not path:
         return None
     try:
@@ -96,11 +96,11 @@ def store_avatar(path):
         if not src.is_file():
             return None
         folder = get_data_dir()
-        if src.parent.resolve() == folder.resolve() and src.name.startswith("avatar"):
+        if src.parent.resolve() == folder.resolve() and src.name.startswith(prefix):
             return str(src)
-        dest = folder / f"avatar-{int(time.time())}{src.suffix.lower() or '.png'}"
+        dest = folder / f"{prefix}-{int(time.time())}{src.suffix.lower() or default_suffix}"
         shutil.copy2(src, dest)
-        for old in folder.glob("avatar*"):
+        for old in folder.glob(f"{prefix}*"):
             if old != dest:
                 try:
                     old.unlink()
@@ -109,3 +109,11 @@ def store_avatar(path):
         return str(dest)
     except Exception:
         return str(path)
+
+
+def store_avatar(path):
+    return _store(path, "avatar", ".png")
+
+
+def store_sound(path):
+    return _store(path, "alert", ".mp3")
