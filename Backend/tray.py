@@ -55,13 +55,7 @@ def _open_target(url):
 
 
 def _prepare_mac():
-    """Make this process a pure menu-bar agent (no Dock icon, no app menu bar).
-
-    LSUIElement must be set before NSApplication is created, otherwise the
-    bundled build flashes a second Dock icon. Also opt out of App Nap, which
-    would otherwise throttle our timers once the tray has been idle a while
-    and delay background notifications.
-    """
+    """Menu-bar-only agent (no Dock icon) that opts out of App Nap."""
     try:
         from Foundation import NSBundle, NSProcessInfo
         info = NSBundle.mainBundle().infoDictionary()

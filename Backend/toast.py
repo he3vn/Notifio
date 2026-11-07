@@ -1,14 +1,4 @@
-"""In-app macOS toast notifications.
-
-Why this exists: macOS only lets *signed app bundles* post real Notification
-Center banners. Running from VS Code (plain python) there is no bundle, so
-rumps/pyobjc/etc. fail, and the osascript fallback is attributed to Script
-Editor (clicking it opens Script Editor). So the tray process draws its own
-small floating banner instead. It needs no bundle, no permission prompt, and
-a click goes exactly where we tell it (the video / stream / article).
-
-Everything here must run on the main thread (it is driven by rumps timers).
-"""
+"""Clickable macOS banners drawn by the tray process (no app bundle needed); main thread only."""
 import time
 import traceback
 from pathlib import Path

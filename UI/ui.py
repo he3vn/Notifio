@@ -73,8 +73,7 @@ def tray_alive():
 
 
 def prevent_app_nap():
-    """macOS throttles background processes without visible windows ("App Nap"),
-    which would delay polling while Notifio is hidden in the tray."""
+    """Stop macOS App Nap from delaying polling while hidden."""
     if not MAC:
         return
     try:
@@ -107,14 +106,7 @@ def _descendant_pids(root):
 
 
 def activate_client_window():
-    """Bring the Flet *window process* to the front on macOS.
-
-    Flet runs Python and the Flutter window as two separate processes, so
-    activating NSApp from Python (what this used to do) activates the wrong
-    process: it makes the Python process a foreground app with an empty menu
-    bar, which is why the menu bar vanished. Activate the window's process
-    instead (a child of ours, but never the tray, which is also a child).
-    """
+    """Activate the Flet window process (not Python's own NSApp, which steals the menu bar)."""
     if not MAC:
         return
     try:
