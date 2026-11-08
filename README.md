@@ -22,7 +22,7 @@ Grab the latest build from the [Releases page](https://github.com/he3vn/Notifio/
 
 | Platform | Download | Status |
 |----------|----------|--------|
-| macOS | [Notifio-macOS.zip](https://github.com/he3vn/Notifio/releases/latest/download/Notifio-macOS.zip) | Fully tested |
+| macOS | [Notifio-macOS.zip](https://github.com/he3vn/Notifio/releases/download/reborn/Notifio-macOS.zip) | Fully tested |
 | Windows | [Notifio-Windows.zip](https://github.com/he3vn/Notifio/releases/latest/download/Notifio-Windows.zip) | **Experimental** |
 
 > **Windows is experimental.** The Windows build is generated automatically, but it has not been tested on real Windows hardware yet. Core features (tray, notifications, downloads and polling) have Windows alternatives wired up, so it should work — please open an issue if something does not.
