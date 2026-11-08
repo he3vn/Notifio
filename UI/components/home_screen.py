@@ -23,7 +23,7 @@ except ImportError:
 ASSETS=Path(__file__).resolve().parents[2] /"Assets"
 LOGOS= ASSETS/"logos"
 BRAND_LOGO= ASSETS/"Ferdium_1024x1024x32-recolored.png"
-BG_IMAGE=ASSETS/"SCR-20261106-lmcs.jpeg"
+BG_IMAGE=ASSETS/"landing_bg.jpg"
 BG_VIDEO=ASSETS/"wallpaper.mp4"
 
 FILES= dict(TOP+BOTTOM)
