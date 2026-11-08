@@ -153,8 +153,9 @@ def _thumb_of(o):
     return None
 
 
-def _views_of(o):
-    v = _first(o, "views", "view_count", "viewCount", "watching_now", "viewers")
+def _views_of(o, live=False):  # live-aware patch
+    keys = ("watching_now", "viewers") if live else ("views", "view_count", "viewCount")
+    v = _first(o, *keys)
     if v is None:
         return None
     try:
@@ -181,7 +182,7 @@ def _items(objs, channel):
             "channel_id": channel["id"],
             "kind": kind,
             "thumb": _thumb_of(o),  # thumbnails patch
-            "views": _views_of(o),
+            "views": _views_of(o, live),
         })
     return items
 

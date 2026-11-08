@@ -40,7 +40,8 @@ def views_text(item):
     text = fmt_count(v)
     if not text:
         return ""
-    return f"{text} {'watching' if item.get('plugin') == 'Twitch' else 'views'}"
+    live = item.get("kind") == "live" and item.get("plugin") in ("Twitch", "Rumble")  # watching patch
+    return f"{text} {'watching' if live else 'views'}"
 
 
 def _placeholder():
