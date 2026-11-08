@@ -25,7 +25,7 @@ def _save_channels(chs):
 
 def _users(logins):
     q = ('query { users(logins: %s) { login displayName '
-         'stream { id title createdAt game { name } } } }' % json.dumps(logins))
+         'stream { id title createdAt viewersCount game { name } } } }' % json.dumps(logins))
     req = urllib.request.Request(
         GQL_URL,
         data=json.dumps({"query": q}).encode(),
@@ -90,6 +90,8 @@ def fetch_twitch():
                 "source": u.get("displayName") or names.get(login, login),
                 "channel_id": login,
                 "kind": "live",
+                "thumb": f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{login}-640x360.jpg?t={int(time.time() // 300)}",  # thumbnails patch
+                "views": s.get("viewersCount"),
             })
     items.sort(key=lambda i: i["ts"], reverse=True)
     return items

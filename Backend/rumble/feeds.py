@@ -129,6 +129,40 @@ def _fetch_objs(cid):
     return page, objs
 
 
+# thumbnails patch: Rumble's embedded JSON key names are not documented, so try several
+def _first(o, *keys):
+    for k in keys:
+        v = o.get(k)
+        if v:
+            return v
+    return None
+
+
+def _thumb_of(o):
+    v = _first(o, "thumb", "thumbnail", "thumbnail_url", "thumbnailUrl", "image", "poster")
+    if isinstance(v, list) and v:
+        v = v[0]
+    if isinstance(v, dict):
+        v = _first(v, "url", "src", "large", "medium", "small")
+    if not isinstance(v, str):
+        # fallback: any top-level string value that looks like an image URL
+        v = next((x for x in o.values() if isinstance(x, str)
+                  and x.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png", ".webp"))), None)
+    if isinstance(v, str):
+        return "https:" + v if v.startswith("//") else v
+    return None
+
+
+def _views_of(o):
+    v = _first(o, "views", "view_count", "viewCount", "watching_now", "viewers")
+    if v is None:
+        return None
+    try:
+        return int(str(v).replace(",", "").strip())
+    except ValueError:
+        return None
+
+
 def _items(objs, channel):
     items = []
     for o in objs:
@@ -146,6 +180,8 @@ def _items(objs, channel):
             "source": channel["name"],
             "channel_id": channel["id"],
             "kind": kind,
+            "thumb": _thumb_of(o),  # thumbnails patch
+            "views": _views_of(o),
         })
     return items
 

@@ -10,6 +10,7 @@ import notifications
 import app_settings
 import sound
 from dexerto.feeds import FEEDS, ago
+from .cards import card_grid  # thumbnails patch
 from storage import save_user,load_user
 from .plugins import TOP, BOTTOM
 from youtube import feeds as yt
@@ -496,7 +497,7 @@ class HomeScreen(ft.Container):
         self.status.value=self.last_status
         items=[i for i in notifications.load() if i.get("plugin")== self.selected][:MAX_SHOWN]
         if items:
-            self.body.controls = [self._row(i) for i in items]
+            self.body.controls = self._cards(items, "")
         elif self.selected not in AVAILAIBLE:
             self.body.controls=[ft.Text("This source isnt availaible yet.",size=13,color=S)]
         else:
@@ -537,6 +538,11 @@ class HomeScreen(ft.Container):
                 delete,
             ]),
         )
+
+    def _cards(self,items,empty):  # thumbnails patch
+        if not items:
+            return [ft.Text(empty,size=13,color=S)] if empty else []
+        return [card_grid(items,self._delete)]
 
     def _delete(self,item):
         notifications.remove(item["link"])
@@ -595,8 +601,7 @@ class HomeScreen(ft.Container):
             ft.Text("Notify me for:",size=12,color=S),
             ft.Row([pref_box("Videos", "video"), pref_box("Shorts", "short"), pref_box("Lives", "live")], spacing=4),
             ft.Container(height=8),
-            *([self._row(i) for i in items]
-              or [ft.Text("No videos yet. Add a channel above.", size=13, color=S)]),
+            *self._cards(items, "No videos yet. Add a channel above."),
         ]
 
     def _add_channel(self,e):
@@ -655,8 +660,7 @@ class HomeScreen(ft.Container):
             self.tw_msg,
             ft.Row(chips,wrap=True,spacing=6,run_spacing=6),
             ft.Container(height=8),
-            *([self._row(i) for i in items]
-              or [ft.Text("No streams yet.Add a channel above.",size=13,color=S)]),
+            *self._cards(items, "No streams yet.Add a channel above."),
         ]
 
     def _add_twitch(self,e):
@@ -708,8 +712,7 @@ class HomeScreen(ft.Container):
             self.rb_msg,
             ft.Row(chips,wrap=True,spacing=6,run_spacing=6),
             ft.Container(height=8),
-            *([self._row(i) for i in items]
-              or [ft.Text("No videos yet. Add a channel above.", size=13, color=S)]),
+            *self._cards(items, "No videos yet. Add a channel above."),
         ]
 
     def _add_rumble(self,e):

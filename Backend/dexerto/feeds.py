@@ -1,4 +1,4 @@
-import ssl, time, urllib.request,urllib.error
+import re, ssl, time, urllib.request,urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -53,7 +53,63 @@ def ago(ts):
             return f"{int(s // secs)}{unit} ago"
     return "just now"
 
+# --- thumbnails patch ---
+MEDIA = "{http://search.yahoo.com/mrss/}"
+CONTENT = "{http://purl.org/rss/1.0/modules/content/}"
+IMG_EXT = (".jpg", ".jpeg", ".png", ".webp", ".gif")
+
+
+def fmt_count(n):
+    """1234 -> 1.2K, 3400000 -> 3.4M"""
+    try:
+        n = int(n)
+    except Exception:
+        return ""
+    for div, suffix in ((1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")):
+        if n >= div:
+            v = n / div
+            if v >= 100:
+                return f"{int(v)}{suffix}"
+            return f"{v:.1f}".rstrip("0").rstrip(".") + suffix
+    return str(n)
+
+
+def _image(it):
+    """Best image for an RSS <item> / Atom <entry>: media tags, enclosure, then first <img> in the body."""
+    for tag in (MEDIA + "thumbnail", MEDIA + "content"):
+        for el in it.iter(tag):
+            url = el.get("url") or ""
+            if url and (tag.endswith("thumbnail") or el.get("medium") == "image"
+                        or (el.get("type") or "").startswith("image")
+                        or url.lower().split("?")[0].endswith(IMG_EXT)):
+                return url
+    enc = it.find("enclosure")
+    if enc is not None and (enc.get("type") or "").startswith("image") and enc.get("url"):
+        return enc.get("url")
+    body = it.findtext(CONTENT + "encoded") or it.findtext("description") or ""
+    m = re.search(r'<img[^>]+src=["\']([^"\']+)', body)
+    return m.group(1) if m else None
+# --- end thumbnails patch ---
+
+
 _CACHE= {}
+_OG={}
+def _og_image(url):
+    if url in _OG:
+        return _OG[url]
+    img=None
+    try:
+        req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (Macintosh) Notifio/1.0"})
+        with urllib.request.urlopen(req,timeout=8,context=_ssl_context()) as r:
+            page=r.read(300_000).decode("utf-8","ignore")
+        m=(re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',page)
+           or re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',page))
+        img=m.group(1) if m else None
+    except Exception:
+        pass
+    _OG[url]=img
+    return img
+
 def fetch_feed(source, url, limit=15):
     headers={"User-Agent":"Mozilla/5.0 (Macintosh) Notifio/1.0"}
     c=_CACHE.get(url)
@@ -79,6 +135,7 @@ def fetch_feed(source, url, limit=15):
             "title":(it.findtext("title")or "").strip(),
             "link": clean_link((it.findtext("link") or "").strip()),
             "ts":_timestamp(it.findtext("pubDate")) or now,
+            "thumb":_image(it),
             "source":source,
         })
     for en in root.iter(ATOM + "entry"):
@@ -87,8 +144,12 @@ def fetch_feed(source, url, limit=15):
             "title":(en.findtext(ATOM+"title")or "").strip(),
             "link":clean_link(link.get("href",""))if link is not None else "",
             "ts":_timestamp(en.findtext(ATOM+"published")or en.findtext(ATOM+"updated")) or now,
+            "thumb":_image(en),
             "source":source,
         })
+    for i in items[:limit]:
+        if not i.get("thumb") and i["link"]:
+            i["thumb"]=_og_image(i["link"])
     items=items[:limit]
     _CACHE[url]=(etag,lm,items)
     return items

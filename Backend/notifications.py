@@ -67,9 +67,21 @@ def add_new(plugin, fetched):
                 if item["link"] and item["link"] in seen_links and item["link"] not in history_links:
                     restored.append({**item, "plugin": plugin})
 
+        # thumbnails patch: keep views/thumb of already-stored items up to date
+        stats_changed = False
+        fresh_by_link = {i["link"]: i for i in fetched if i.get("link")}
+        for h in history:
+            f = fresh_by_link.get(h.get("link"))
+            if not f:
+                continue
+            for k in ("views", "thumb"):
+                v = f.get(k)
+                if v is not None and v != h.get(k):
+                    h[k] = v
+                    stats_changed = True
         if first:
             seen[plugin] = []
-        if new or restored:
+        if new or restored or stats_changed:
             save(sorted(new + restored + history, key=lambda i: i["ts"], reverse=True))
             seen[plugin] = ([i["link"] for i in new] + seen.get(plugin, []))[:MAX_SEEN]
         if new or restored or first:

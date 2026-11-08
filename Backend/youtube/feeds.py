@@ -7,6 +7,7 @@ from dexerto.feeds import _ssl_context,_timestamp
 
 ATOM="{http://www.w3.org/2005/Atom}"
 YT="{http://www.youtube.com/xml/schemas/2015}"
+MEDIA="{http://search.yahoo.com/mrss/}"
 UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15"
 FILE=get_data_dir() /"youtube_channels.json"
 PREFS_FILE=get_data_dir() /"youtube_prefs.json"
@@ -129,6 +130,15 @@ def _feed_root(cid):
     with _open(f"https://www.youtube.com/feeds/videos.xml?channel_id={cid}") as r:
         return ET.fromstring(r.read())
 
+# thumbnails patch: view count from <media:statistics views="..."/>
+def _views(en):
+    st = en.find(f"{MEDIA}group/{MEDIA}community/{MEDIA}statistics")
+    try:
+        return int(st.get("views")) if st is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse(root,ch,known):
     items,classified=[],0
     for en in root.iter(ATOM+"entry"):
@@ -147,6 +157,8 @@ def _parse(root,ch,known):
             "source":ch["name"],
             "channel_id":ch["id"],
             "kind":kind,
+            "thumb":f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",  # thumbnails patch
+            "views":_views(en),
         })
     return items
 
