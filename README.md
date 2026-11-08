@@ -12,7 +12,7 @@
 
 Built with Python and [Flet](https://flet.dev). Notifio tracks **Twitch, YouTube, Rumble and news feeds** (powered by [Dexerto](https://www.dexerto.com)) with no accounts and no API keys.
 
-![Notifio](Assets/hero_preview.png)
+
 
 ---
 
