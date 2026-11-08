@@ -21,6 +21,8 @@ COMMON_HIDDEN = [
     "urllib.request",
     "urllib.error",
     "webbrowser",
+    "yt_dlp",
+    "yt_dlp_ejs",
 ]
 
 MAC_HIDDEN = ["AppKit", "Foundation", "UserNotifications", "objc"]

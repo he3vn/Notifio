@@ -85,6 +85,8 @@ class Poller:
             kind = i.get("kind")
             if i.get("plugin")=="Youtube" and kind and PREF_OF.get(kind,kind) not in wanted:
                 continue
+            if i.get("plugin")=="Twitch" and kind=="video":  # VODs appear silently
+                continue
             out.append(i)
         return out
 

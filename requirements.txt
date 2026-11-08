@@ -3,6 +3,7 @@ pyinstaller>=6.0.0
 Pillow>=10.0.0
 certifi
 curl_cffi
+yt-dlp[default]
 pyobjc-core; sys_platform == "darwin"
 pyobjc-framework-Cocoa; sys_platform == "darwin"
 pyobjc-framework-UserNotifications; sys_platform == "darwin"

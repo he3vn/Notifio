@@ -9,6 +9,7 @@ from pathlib import Path
 import notifications
 import app_settings
 import sound
+import downloader  # downloads patch
 from dexerto.feeds import FEEDS, ago
 from .cards import card_grid  # thumbnails patch
 from storage import save_user,load_user
@@ -145,6 +146,7 @@ class HomeScreen(ft.Container):
                 spacing=0,tight=True,vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 controls=[
                     action(ft.Icons.ADD,"Add plugin",self._add_plugin),
+                    action(ft.Icons.DOWNLOAD_ROUNDED,"Downloads",self._toggle_downloads),
                     action(ft.Icons.DELETE_OUTLINE,"Clear all notifications",self._clear),
                     action(ft.Icons.REFRESH,"Check now",self._manual_refresh),
                     action(ft.Icons.SETTINGS_OUTLINED,"Settings",self._toggle_settings),
@@ -172,7 +174,8 @@ class HomeScreen(ft.Container):
             shadow=[ft.BoxShadow(blur_radius=24,color="#66000000",offset=ft.Offset(0,8))],
             content=ft.Row([ft.Container(content=self.tabcol,width=130,height=280,padding=10,bgcolor="#0e0f11"),self.pane],spacing=0),
         )
-        self.content=ft.Stack(expand=True,controls=[self.wall,self.veil,ft.Container(left=0,right=0,top=0,bottom=0,content=ft.Column(expand=True,spacing=0,controls=[top_bar, panel])),self.settings_box])
+        self._build_downloads_box()
+        self.content=ft.Stack(expand=True,controls=[self.wall,self.veil,ft.Container(left=0,right=0,top=0,bottom=0,content=ft.Column(expand=True,spacing=0,controls=[top_bar, panel])),self.settings_box,self.dl_box])
         self._tab("Setup")
         self._render()
         
@@ -399,6 +402,7 @@ class HomeScreen(ft.Container):
 
     def _view_changed(self):
         self.settings_box.visible=False
+        self.dl_box.visible=False
         self._layout_nav()
         self._render()
         self._safe_update()
@@ -412,6 +416,7 @@ class HomeScreen(ft.Container):
         self._view_changed()
 
     def _toggle_settings(self,e):
+        self.dl_box.visible=False
         self.settings_box.visible=not self.settings_box.visible
         self._safe_update()
 
@@ -539,10 +544,78 @@ class HomeScreen(ft.Container):
             ]),
         )
 
+    # downloads patch
+    def _build_downloads_box(self):
+        cur = app_settings.get("download_quality")
+        self.dl_status = ft.Text("", size=11, color=S)
+        dd = ft.Dropdown(
+            value=cur, width=240, dense=True, text_size=13,
+            options=[ft.DropdownOption(key=q, text=q) for q in downloader.QUALITIES],
+        )
+
+        def changed(e):
+            v = getattr(e.control, "value", None)
+            if v in downloader.QUALITIES:
+                app_settings.set_value("download_quality", v)
+
+        for attr in ("on_select", "on_change"):  # name differs between flet versions
+            try:
+                setattr(dd, attr, changed)
+            except Exception:
+                pass
+        self.dl_box = ft.Container(
+            visible=False, right=16, top=BAR_H+24, width=300, padding=18,
+            bgcolor="#000000", border_radius=18,
+            border=ft.Border.all(1, "#23252a"),
+            shadow=[ft.BoxShadow(blur_radius=24, color="#66000000", offset=ft.Offset(0, 8))],
+            content=ft.Column(spacing=10, tight=True, controls=[
+                ft.Text("Downloads", size=15, color=H, font_family="Inter-SemiBold", weight=ft.FontWeight.W_600),
+                ft.Text("Default quality", size=12, color=S),
+                dd,
+                ft.Text(f"Saved to {downloader.folder()}", size=11, color=S),
+                ft.Button("Open folder", on_click=lambda e: downloader.open_folder(), height=38, style=BTN),
+                self.dl_status,
+            ]),
+        )
+
+    def _toggle_downloads(self,e):
+        self.settings_box.visible=False
+        self.dl_box.visible=not self.dl_box.visible
+        if self.dl_box.visible:
+            self.dl_status.value=downloader.status_text()
+        self._safe_update()
+
+    def _download(self,item,quality=None):
+        downloader.start(item,quality)
+
+    def _choose_quality(self,item):
+        cur=app_settings.get("download_quality")
+
+        def pick(q):
+            self._close_dialog(dlg)
+            self._download(item,q)
+
+        def chip(q):
+            on=q==cur
+            return ft.Container(
+                padding=ft.Padding(14,10,14,10),border_radius=10,
+                bgcolor="#1c1d20" if on else "#141516",
+                border=ft.Border.all(1,"#5e6ad2" if on else "#23252a"),
+                on_click=lambda e,q=q:pick(q),
+                content=ft.Text(q+("  (default)" if on else ""),size=13,color=H,font_family="Inter-Medium"),
+            )
+
+        dlg=ft.AlertDialog(
+            title=ft.Text("Download quality"),
+            content=ft.Column([chip(q) for q in downloader.QUALITIES],tight=True,spacing=6,width=260),
+            actions=[ft.TextButton("Cancel",on_click=lambda ev:self._close_dialog(dlg))],
+        )
+        self._open_dialog(dlg)
+
     def _cards(self,items,empty):  # thumbnails patch
         if not items:
             return [ft.Text(empty,size=13,color=S)] if empty else []
-        return [card_grid(items,self._delete)]
+        return [card_grid(items,self._delete,self._download,self._choose_quality)]
 
     def _delete(self,item):
         notifications.remove(item["link"])

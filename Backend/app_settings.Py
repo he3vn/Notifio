@@ -18,6 +18,7 @@ DEFAULTS = {
     "sound_file": "",
     "group_after": 3,
     "close_to_tray": True,
+    "download_quality": "720p",
 }
 
 CHOICES = {
@@ -26,6 +27,7 @@ CHOICES = {
     "max_shown": [25, 50, 100],
     "poll_interval": [15, 30, 60, 300],
     "group_after": [1, 3, 5, 10],
+    "download_quality": ["Best", "1080p", "720p", "480p", "360p", "240p", "144p", "Audio only"],
 }
 
 _cache = None

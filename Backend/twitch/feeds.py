@@ -38,6 +38,56 @@ def _users(logins):
     return [u for u in payload["data"].get("users") or [] if u]
 
 
+
+VODS_PER_CHANNEL = 5
+
+
+def _vods(logins):
+    """{login: [video nodes]}. Never raises: VODs are optional, live detection must not break."""
+    q = ('query { users(logins: %s) { login videos(first: %d, type: ARCHIVE, sort: TIME) { edges { node { '
+         'id title createdAt viewCount game { name } previewThumbnailURL(width: 640, height: 360) '
+         '} } } } }' % (json.dumps(logins), VODS_PER_CHANNEL))
+    try:
+        req = urllib.request.Request(
+            GQL_URL,
+            data=json.dumps({"query": q}).encode(),
+            headers={"Client-ID": CLIENT_ID, "Content-Type": "application/json", "User-Agent": UA},
+        )
+        with urllib.request.urlopen(req, timeout=8, context=_ssl_context()) as r:
+            payload = json.loads(r.read())
+    except Exception:
+        return {}
+    out = {}
+    for u in ((payload.get("data") or {}).get("users")) or []:
+        if not u:
+            continue
+        edges = (u.get("videos") or {}).get("edges") or []
+        out[u["login"]] = [e["node"] for e in edges if e and e.get("node")]
+    return out
+
+
+def _vod_items(u, vods, names, live_ts):
+    login = u["login"]
+    out = []
+    for v in vods:
+        ts = _timestamp(v.get("createdAt")) or time.time()
+        if live_ts and abs(ts - live_ts) < 180:
+            continue  # this is the recording of the stream that is live right now
+        title = (v.get("title") or "").strip() or "Past broadcast"
+        game = (v.get("game") or {}).get("name")
+        out.append({
+            "title": f"{title} ({game})" if game else title,
+            "link": f"https://www.twitch.tv/videos/{v['id']}",
+            "ts": ts,
+            "source": u.get("displayName") or names.get(login, login),
+            "channel_id": login,
+            "kind": "video",
+            "thumb": v.get("previewThumbnailURL") or None,
+            "views": v.get("viewCount"),
+        })
+    return out
+
+
 def parse_login(text):
     t = text.strip()
     m = re.search(r"twitch\.tv/([A-Za-z0-9_]+)", t)
@@ -76,8 +126,12 @@ def fetch_twitch():
     names = {c["id"]: c["name"] for c in channels}
     items = []
     for i in range(0, len(channels), BATCH):
-        for u in _users([c["id"] for c in channels[i:i + BATCH]]):
+        batch = _users([c["id"] for c in channels[i:i + BATCH]])
+        vods = _vods([u["login"] for u in batch])
+        for u in batch:
             s = u.get("stream")
+            live_ts = (_timestamp(s.get("createdAt")) if s else 0)
+            items += _vod_items(u, vods.get(u["login"], []), names, live_ts)
             if not s:
                 continue
             login = u["login"]

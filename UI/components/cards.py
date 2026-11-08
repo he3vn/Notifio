@@ -1,5 +1,6 @@
 #Thumbnail time after i will do downloads etc
 import flet as ft
+import downloader  # downloads patch
 from dexerto.feeds import ago, fmt_count
 
 H, S = "#f7f8f8", "#8a8f98"
@@ -65,7 +66,62 @@ def _badge(text, bg, dot):
     )
 
 
-def _card(item, on_delete):
+def _download_ui(item, on_download, on_choose):
+    """Download icon + quality chevron (title row) and progress row. (None, None) if not downloadable."""
+    link = item.get("link") or ""
+    if not (on_download and link and downloader.can_download(item)):
+        return None, None
+    ACC, OK, BAD = "#5e6ad2", "#3fb950", "#ef6b6b"
+    btn = ft.IconButton(icon=ft.Icons.DOWNLOAD_ROUNDED, icon_size=18, icon_color=S,
+                        width=32, height=32, tooltip="Download")
+    more = ft.IconButton(icon=ft.Icons.ARROW_DROP_DOWN, icon_size=18, icon_color=S,
+                         width=22, height=32, tooltip="Choose quality",
+                         on_click=lambda e, it=item: on_choose(it) if on_choose else None)
+    bar = ft.ProgressBar(value=0, bar_height=4, color=ACC, bgcolor="#2a2c31",
+                         border_radius=2, expand=True)
+    info = ft.Text("", size=11, color=S, font_family="Inter-Medium")
+    progress = ft.Container(
+        visible=False, padding=ft.Padding(4, 0, 4, 4),
+        content=ft.Row([bar, info], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER))
+
+    def refresh():
+        j = downloader.job(link)
+        st = j["state"] if j else "idle"
+        progress.visible = st != "idle"
+        bar.visible = st in downloader.ACTIVE or st == "done"
+        if st in downloader.ACTIVE:
+            btn.icon, btn.icon_color, btn.tooltip = ft.Icons.DOWNLOAD_ROUNDED, ACC, "Downloading..."
+            bar.value = None if st in ("queued", "processing") else j["pct"]
+        elif st == "done":
+            btn.icon, btn.icon_color, btn.tooltip = ft.Icons.CHECK_CIRCLE_ROUNDED, OK, "Show in folder"
+            bar.value = 1
+        elif st == "error":
+            btn.icon, btn.icon_color, btn.tooltip = ft.Icons.ERROR_OUTLINE, BAD, "Failed. Click to retry"
+        else:
+            btn.icon, btn.icon_color, btn.tooltip = ft.Icons.DOWNLOAD_ROUNDED, S, "Download"
+        info.value = downloader.describe(j) if j else ""
+        info.color = BAD if st == "error" else S
+        for c in (btn, progress):
+            try:
+                c.update()
+            except Exception:
+                pass
+
+    def click(e):
+        j = downloader.job(link)
+        st = j["state"] if j else "idle"
+        if st == "done":
+            downloader.reveal(link)
+        elif st not in downloader.ACTIVE:
+            on_download(item)
+
+    btn.on_click = click
+    downloader.watch(link, refresh)
+    refresh()
+    return ft.Row([btn, more], spacing=0, tight=True), progress
+
+
+def _card(item, on_delete, on_download=None, on_choose=None):
     url = thumb_url(item)
     image = _placeholder()
     if url:
@@ -79,17 +135,21 @@ def _card(item, on_delete):
         media = ft.Stack([media, ft.Container(left=8, top=8, content=_badge(*badge))])
 
     meta = " · ".join(p for p in (item.get("source", ""), views_text(item), ago(item.get("ts"))) if p)
+    dl_controls, progress = _download_ui(item, on_download, on_choose)
     body = ft.Container(
         url=item.get("link") or None,
         content=ft.Column(spacing=10, tight=True,
                           horizontal_alignment=ft.CrossAxisAlignment.STRETCH, controls=[
             media,
-            ft.Container(height=38, padding=ft.Padding(4, 0, 4, 0), content=ft.Text(
-                item.get("title", ""), size=14, color=H, font_family="Inter-SemiBold",
-                max_lines=2, overflow=ft.TextOverflow.ELLIPSIS)),
+            ft.Container(height=38, padding=ft.Padding(4, 0, 4, 0), content=ft.Row(
+                [ft.Text(item.get("title", ""), size=14, color=H, font_family="Inter-SemiBold",
+                         max_lines=2, overflow=ft.TextOverflow.ELLIPSIS, expand=True)]
+                + ([dl_controls] if dl_controls else []),
+                spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER)),
             ft.Container(padding=ft.Padding(4, 0, 4, 2), content=ft.Text(
                 meta, size=12, color=S, font_family="Inter-Medium",
                 max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)),
+            *([progress] if progress else []),
         ]),
     )
 
@@ -121,7 +181,7 @@ def _card(item, on_delete):
     return card
 
 
-def card_grid(items, on_delete):
+def card_grid(items, on_delete, on_download=None, on_choose=None):
 
-    return ft.ResponsiveRow([_card(i, on_delete) for i in items],
+    return ft.ResponsiveRow([_card(i, on_delete, on_download, on_choose) for i in items],
                             spacing=GAP, run_spacing=GAP)
