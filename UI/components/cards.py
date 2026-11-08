@@ -10,9 +10,10 @@ THUMB_H = 200
 GAP = 16
 
 BADGES = {
-    "live": ("LIVE", "#e5484d", True),
-    "short": ("SHORT", "#5e6ad2", False),
-    "upcoming": ("UPCOMING", "#3a3d44", False),
+    "live": ("LIVE", "#ffffff", True),
+    "video": ("VIDEO", "#ffffff", False),
+    "short": ("SHORT", "#ffffff", False),
+    "upcoming": ("UPCOMING", "#ffffff", False),
 }
 
 
@@ -56,11 +57,12 @@ def _placeholder():
 def _badge(text, bg, dot):
     parts = []
     if dot:
-        parts.append(ft.Container(width=6, height=6, border_radius=3, bgcolor="#ffffff"))
-    parts.append(ft.Text(text, size=10, color="#ffffff", font_family="Inter-SemiBold",
+        parts.append(ft.Container(width=6, height=6, border_radius=3, bgcolor="#e5484d"))
+    parts.append(ft.Text(text, size=10, color="#0b0b0f", font_family="Inter-SemiBold",
                          weight=ft.FontWeight.W_600))
     return ft.Container(
         padding=ft.Padding(8, 3, 8, 3), border_radius=6, bgcolor=bg,
+        border=ft.Border.all(1, "#d8dbe0"),
         content=ft.Row(parts, spacing=5, tight=True,
                        vertical_alignment=ft.CrossAxisAlignment.CENTER),
     )

@@ -18,6 +18,8 @@ for d in (UI_DIR, BACKEND_DIR):
         sys.path.insert(0, str(d))
 
 import control
+import downloader
+import reminders
 from components import LoadingScreen, LandingScreen, HomeScreen
 from storage import save_user, get_data_dir, read_json, write_json
 from poller import Poller
@@ -278,6 +280,7 @@ async def main(page: ft.Page):
                 _log("to_front failed:\n" + traceback.format_exc())
             await play_media()
             control.clear_missed()
+            reminders.mark_seen()
             _log("show_window done")
         except Exception:
             _log("show_window failed:\n" + traceback.format_exc())
@@ -361,9 +364,11 @@ async def main(page: ft.Page):
 
         home.on_plugins_changed = plugins_changed
         home.on_settings = redo_setup
+        home.on_wipe = wipe_all
         home_ref["h"] = home
         root.content = home
         page.update()
+        reminders.mark_seen()
         start_poller(data.get("plugins", []))
 
     def redo_setup():
@@ -378,12 +383,28 @@ async def main(page: ft.Page):
         save_user({"plugins": plugins})
         open_home(data)
 
+    def wipe_all():
+        stop_poller()
+        try:
+            import app_reset
+            app_reset.wipe()
+        except Exception:
+            _log("wipe failed:\n" + traceback.format_exc())
+        state["catchup"] = True
+        redo_setup()
+
     saved = load_setup()
     if saved:
         open_home(saved)
     else:
         root.content = LandingScreen(page=page, on_finish=finish_setup)
         page.update()
+
+    reminders.start()
+    try:
+        downloader.resume_pending()
+    except Exception:
+        _log("resume downloads failed:\n" + traceback.format_exc())
 
 
 if __name__ == "__main__":

@@ -11,8 +11,18 @@ permissions:
 
 jobs:
   build:
-    name: Build (macOS)
-    runs-on: macos-latest
+    name: Build (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS
+          - os: windows-latest
+            label: Windows (experimental)
+    runs-on: ${{ matrix.os }}
+    # Windows is experimental: never block the macOS release if it fails.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
 
     steps:
       - name: Checkout Code
@@ -35,8 +45,8 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: notifio-macos
-          path: dist/Notifio-macOS.zip
+          name: notifio-${{ runner.os }}
+          path: dist/Notifio-*.zip
           if-no-files-found: ignore
 
   release:
@@ -48,6 +58,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          merge-multiple: true
 
       - name: Prepare release files
         run: |
@@ -62,3 +73,7 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          append_body: true
+          body: |
+            > **Windows build is experimental.** It is built automatically but has not
+            > been tested on real Windows hardware yet. Please report any issues.

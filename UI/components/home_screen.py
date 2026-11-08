@@ -8,6 +8,7 @@ import flet as ft
 from pathlib import Path
 import notifications
 import app_settings
+import reminders
 import sound
 import downloader  # downloads patch
 from dexerto.feeds import FEEDS, ago
@@ -65,6 +66,7 @@ class HomeScreen(ft.Container):
         self.on_settings = on_settings
         self.on_refresh = None
         self.on_plugins_changed = None
+        self.on_wipe = None
         self.plugins = list(plugins or [])
         self.selected = None
         self.item_boxes = {}
@@ -294,13 +296,85 @@ class HomeScreen(ft.Container):
         self._tab("Sound")
 
     def _tab(self,k):
-        panes={"Setup":self._p_setup,"Background":self._p_bg,"Theme":self._p_theme,"Sound":self._p_sound}
+        panes={"Setup":self._p_setup,"Background":self._p_bg,"Theme":self._p_theme,"Sound":self._p_sound,"Reminders":self._p_reminders}
         self.tabcol.controls=[ft.Container(content=ft.Text(t,size=13,color=H if t==k else S,font_family="Inter-Medium"),padding=ft.Padding(12,9,12,9),border_radius=10,bgcolor="#1c1d20" if t==k else None,on_click=lambda e,t=t:self._tab(t)) for t in panes]
         self.pane.content=panes[k]()
         self._safe_update()
 
     def _p_setup(self):
-        return ft.Column([ft.Button("Redo setup",on_click=self._redo,height=38,style=BTN)])
+        wipe_style=ft.ButtonStyle(bgcolor="#ef6b6b",color="#0b0b0f",shape=ft.RoundedRectangleBorder(radius=19),padding=ft.Padding(22,0,22,0),text_style=ft.TextStyle(font_family="Inter-Medium",size=13,weight=ft.FontWeight.W_500))
+        return ft.Column([
+            ft.Button("Redo setup",on_click=self._redo,height=38,style=BTN),
+            ft.Button("Wipe history",on_click=self._confirm_wipe,height=38,style=wipe_style),
+            ft.Text("Removes all channels and history, then restarts setup.",size=11,color=S),
+        ],spacing=12)
+
+    def _p_reminders(self):
+        def toggle(e):
+            on=bool(e.control.value)
+            app_settings.set_value("reminder",on)
+            if on:
+                reminders.mark_seen()
+            dd.value=str(app_settings.get("reminder_interval")) if on else "off"
+            self._safe_update()
+
+        def changed(e):
+            v=getattr(e.control,"value",None)
+            if v=="off":
+                app_settings.set_value("reminder",False)
+                self._safe_update()
+                return
+            try:
+                v=int(v)
+            except (TypeError,ValueError):
+                return
+            if v in app_settings.CHOICES["reminder_interval"]:
+                app_settings.set_value("reminder_interval",v)
+                app_settings.set_value("reminder",True)
+                reminders.mark_seen()
+                self._safe_update()
+
+        def label(m):
+            return "1 hour" if m==60 else ("2 hours" if m==120 else f"{m} minutes")
+
+        cur="off" if not app_settings.get("reminder") else str(app_settings.get("reminder_interval"))
+        dd=ft.Dropdown(
+            value=cur,width=240,dense=True,text_size=13,
+            options=[ft.DropdownOption(key="off",text="Off")]+[
+                ft.DropdownOption(key=str(m),text=label(m)) for m in app_settings.CHOICES["reminder_interval"]
+            ],
+        )
+        for attr in ("on_select","on_change"):
+            try:
+                setattr(dd,attr,changed)
+            except Exception:
+                pass
+        return ft.Column([
+            ft.Switch(label="Remind me to check notifications",value=bool(app_settings.get("reminder")),on_change=toggle),
+            ft.Text("Remind me every",size=12,color=S),
+            dd,
+            ft.Button("Send test reminder",on_click=lambda e:reminders.test(),height=38,style=BTN),
+            ft.Text("Only reminds you when something new has arrived since you last looked.",size=11,color=S),
+        ],spacing=10)
+
+    def _confirm_wipe(self,e):
+        self.settings_box.visible=False
+        self._safe_update()
+
+        def go(ev):
+            self._close_dialog(dlg)
+            if self.on_wipe:
+                self.on_wipe()
+
+        dlg=ft.AlertDialog(
+            title=ft.Text("Wipe all history?"),
+            content=ft.Text("This deletes every followed channel and all notification history, then takes you back to the main setup screen."),
+            actions=[
+                ft.TextButton("Cancel",on_click=lambda ev:self._close_dialog(dlg)),
+                ft.TextButton("Wipe everything",on_click=go,style=ft.ButtonStyle(color="#ef6b6b")),
+            ],
+        )
+        self._open_dialog(dlg)
 
     def _p_bg(self):
         p=self._pref("bg_video","") or str(BG_VIDEO)

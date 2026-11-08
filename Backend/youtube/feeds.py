@@ -189,13 +189,15 @@ def _recheck_lives():
     for item in notifications.load():
         if item.get("plugin") != "Youtube":
             continue
-        if item.get("kind") not in ("upcoming", None):
+        # upcoming streams become live, and live streams need one more look
+        # after they end so they can be downloaded like a normal video.
+        if item.get("kind") not in ("upcoming", "live", None):
             continue
         link=item.get("link","")
         if "v=" not in link:
             continue
         candidates.append(link)
-        if len(candidates)>=3:
+        if len(candidates)>=5:
             break
     if not candidates:
         return
@@ -210,6 +212,8 @@ def _recheck_lives():
             updates[link]="live"
         elif state is None:
             updates[link]="video"
+        elif state=="upcoming":
+            updates[link]="upcoming"
     if not updates:
         return
 

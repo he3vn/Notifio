@@ -1,4 +1,5 @@
 import threading
+import time
 import traceback
 from storage import get_data_dir, read_json, write_json
 
@@ -55,9 +56,15 @@ def add_new(plugin, fetched):
         seen_links = set(seen.get(plugin, []))
         known = seen_links | history_links
         new = []
+        added_at = time.time()
         for item in fetched:
             if item["link"] and item["link"] not in known:
-                new.append({**item, "plugin": plugin})
+                entry = {**item, "plugin": plugin}
+                # Remember when we discovered it, not just when the creator
+                # published it, so reminders are accurate even for delayed feeds.
+                if not first:
+                    entry["_added"] = added_at
+                new.append(entry)
                 known.add(item["link"])
 
         restored = []

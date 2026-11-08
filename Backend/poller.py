@@ -60,7 +60,10 @@ class Poller:
         for name in self.plugins:
             seeding = not notifications.has_seen(name)
             try:
-                new = notifications.add_new(name, SOURCES[name]())
+                fetched = SOURCES[name]()
+                if self._stop.is_set():  # wiped/stopped while fetching
+                    return
+                new = notifications.add_new(name, fetched)
             except Exception:
                 traceback.print_exc()
                 failed = True

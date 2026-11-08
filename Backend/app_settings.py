@@ -19,6 +19,9 @@ DEFAULTS = {
     "group_after": 3,
     "close_to_tray": True,
     "download_quality": "720p",
+    "reminder": False,
+    "reminder_interval": 30,
+    "last_seen_ts": 0.0,
 }
 
 CHOICES = {
@@ -28,6 +31,7 @@ CHOICES = {
     "poll_interval": [15, 30, 60, 300],
     "group_after": [1, 3, 5, 10],
     "download_quality": ["Best", "1080p", "720p", "480p", "360p", "240p", "144p", "Audio only"],
+    "reminder_interval": [5, 10, 15, 30, 60, 120],
 }
 
 _cache = None
