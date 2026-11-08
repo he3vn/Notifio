@@ -18,8 +18,10 @@ jobs:
         include:
           - os: macos-latest
             label: macOS
+            target: --macos
           - os: windows-latest
             label: Windows (experimental)
+            target: --windows
     runs-on: ${{ matrix.os }}
     # Windows is experimental: never block the macOS release if it fails.
     continue-on-error: ${{ matrix.os == 'windows-latest' }}
@@ -40,7 +42,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build Application
-        run: python build.py
+        run: python build.py ${{ matrix.target }}
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4

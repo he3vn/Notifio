@@ -1,11 +1,22 @@
-flet>=1.0.4
+# UI + desktop runtime (flet[all] includes flet-cli and flet-desktop, which
+# `flet pack` needs; pairing with flet-video keeps flet pinned on 1.1.0).
+flet[all]==1.1.0
+flet-video==1.1.0
+
+# Packaging
 pyinstaller>=6.0.0
 Pillow>=10.0.0
+
+# Networking / downloads
 certifi
 curl_cffi
 yt-dlp[default]
+
+# macOS notifications and menu bar
 pyobjc-core; sys_platform == "darwin"
 pyobjc-framework-Cocoa; sys_platform == "darwin"
 pyobjc-framework-UserNotifications; sys_platform == "darwin"
-winotify; sys_platform == "win32"
-pystray; sys_platform == "win32"
+
+# Windows notifications and system tray
+winotify>=1.1.0; sys_platform == "win32"
+pystray>=0.19.5; sys_platform == "win32"

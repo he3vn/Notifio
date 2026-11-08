@@ -52,28 +52,27 @@ Grab the latest build from the [Releases page](https://github.com/he3vn/Notifio/
 ---
 
 ## Screenshots
-<!-- Replace these five paths with your own screenshots. -->
-<!-- 1: setup screen, 2-4: one per plugin, 5: last plugin + settings open. -->
+<!-- Real screenshots live in Assets/dd/. -->
 
 ### 1. Setup
 
-![Setup screen](Assets/readme/01-setup.png)
+![Setup screen](Assets/dd/setup.jpeg)
 
 ### 2. Twitch
 
-![Twitch plugin](Assets/readme/02-twitch.png)
+![Twitch plugin](Assets/dd/twitch.jpeg)
 
 ### 3. YouTube
 
-![YouTube plugin](Assets/readme/03-youtube.png)
+![YouTube plugin](Assets/dd/youtube.png)
 
 ### 4. Rumble
 
-![Rumble plugin](Assets/readme/04-rumble.png)
+![Rumble plugin](Assets/dd/rumble.jpeg)
 
 ### 5. News + Settings
 
-![News plugin and settings](Assets/readme/05-news-settings.png)
+![News plugin and settings](Assets/dd/news.jpeg)
 
 ---
 
@@ -170,7 +169,8 @@ On first launch you'll go through a short setup where you pick your name, pictur
 ### Requirements
 
 ```text
-flet>=1.0.4
+flet[all]==1.1.0
+flet-video==1.1.0
 pyinstaller>=6.0.0
 Pillow>=10.0.0
 certifi
@@ -179,8 +179,8 @@ yt-dlp[default]
 pyobjc-core; sys_platform == "darwin"
 pyobjc-framework-Cocoa; sys_platform == "darwin"
 pyobjc-framework-UserNotifications; sys_platform == "darwin"
-winotify; sys_platform == "win32"
-pystray; sys_platform == "win32"
+winotify>=1.1.0; sys_platform == "win32"
+pystray>=0.19.5; sys_platform == "win32"
 ```
 
 `curl_cffi` is what lets Notifio read Rumble. Rumble sits behind Cloudflare, which blocks plain Python and curl requests, so Notifio makes the request with a Chrome-like TLS fingerprint instead.
@@ -192,15 +192,17 @@ pystray; sys_platform == "win32"
 ## Building a standalone app
 
 ```bash
-python3 build.py
+python3 build.py            # build for the current platform
+python3 build.py --macos    # build Notifio-macOS.zip (run on macOS)
+python3 build.py --windows  # build Notifio-Windows.zip (run on Windows)
 ```
 
-This packs the app with `flet pack` and creates a `dist/` folder with:
+The build creates a `dist/` folder with:
 
 - **macOS** — `Notifio.app` + `Notifio-macOS.zip`
 - **Windows** — `Notifio.exe` / `Notifio` folder + `Notifio-Windows.zip` (experimental)
 
-The GitHub release workflow builds both platforms automatically when a `v*` tag is pushed.
+PyInstaller cannot cross-compile, so a Windows `.exe` must be built on Windows. The GitHub release workflow does this automatically on a Windows runner when a `v*` tag is pushed.
 
 ---
 
