@@ -351,11 +351,11 @@ MIT
 
 ## Disclosed AI usage
 
-- Readme.md
+-  Git /Build part of Readme.md
 - Patches for downloads
 - Tray, build.py and github stuff/license
-- Moving effect for landing screen
-- rumbefeed scraping
+- Moving effect for landing screen(mouse parralax)
+- rumbe feed scraping
 - _toast.py
 
 and thats it some of these were partially made by me but after research and debugging i couldnt continue with the risk of fraud
