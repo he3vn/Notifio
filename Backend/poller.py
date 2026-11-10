@@ -3,7 +3,8 @@ import traceback
 import notifications
 import notifier
 from dexerto.feeds import FEEDS, fetch_all
-from youtube.feeds import fetch_youtube, load_prefs,force_recheck
+from net import run_parallel
+from youtube.feeds import fetch_youtube, load_prefs, force_recheck
 from twitch.feeds import fetch_twitch
 from rumble.feeds import fetch_rumble
 
@@ -22,6 +23,7 @@ KIND_TEXT={
 PREF_OF={"upcoming":"live"}
 INTERVAL = 30
 MAX_INDIVIDUAL = 3
+SOURCE_WORKERS = 4  # every plugin fetched at the same time
 
 
 class Poller:
@@ -57,19 +59,33 @@ class Poller:
         added = []
         to_ping = []
         failed = False
-        for name in self.plugins:
-            seeding = not notifications.has_seen(name)
+        plugins = list(self.plugins)
+        # seeding decided up front: on the very first poll of a plugin the
+        # whole backlog is swallowed instead of notified
+        seeding = {name: not notifications.has_seen(name) for name in plugins}
+
+        def work(name):
+            return SOURCES[name]()
+
+        fetched = []
+        for name, items, err in run_parallel(work, plugins, SOURCE_WORKERS):
+            if self._stop.is_set():  # wiped/stopped while fetching
+                return
+            if err is not None:
+                traceback.print_exception(type(err), err, err.__traceback__)
+                failed = True
+            else:
+                fetched.append((name, items))
+
+        for name, items in fetched:
             try:
-                fetched = SOURCES[name]()
-                if self._stop.is_set():  # wiped/stopped while fetching
-                    return
-                new = notifications.add_new(name, fetched)
+                new = notifications.add_new(name, items)
             except Exception:
                 traceback.print_exc()
                 failed = True
                 continue
             added += new
-            if not seeding:
+            if not seeding[name]:
                 to_ping += new
 
         if self._stop.is_set():

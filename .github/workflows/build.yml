@@ -1,20 +1,21 @@
 name: Build Notifio (CI)
 
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
+# A newer push to the same branch cancels the older run.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            target: --macos
-          - os: windows-latest
-            target: --windows
-    runs-on: ${{ matrix.os }}
+    # macOS is built locally; CI only needs to produce the Windows zip,
+    # which cannot be cross-compiled from a Mac.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,7 +23,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.txt
-      - run: python build.py ${{ matrix.target }}
+      - run: python build.py --windows
       - uses: actions/upload-artifact@v4
         with:
           name: Notifio-${{ runner.os }}

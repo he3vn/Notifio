@@ -4,6 +4,8 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
+from net import run_parallel, ssl_context as _ssl_context
+
 ATOM = "{http://www.w3.org/2005/Atom}"
 
 FEEDS = {
@@ -13,12 +15,6 @@ FEEDS = {
 }
 
 
-def _ssl_context():
-    try:
-        import certifi
-        return ssl.create_default_context(cafile=certifi.where())
-    except Exception:
-        return None
 
 
 def _timestamp(text):
@@ -147,10 +143,14 @@ def fetch_feed(source, url, limit=15):
             "thumb":_image(en),
             "source":source,
         })
-    for i in items[:limit]:
-        if not i.get("thumb") and i["link"]:
-            i["thumb"]=_og_image(i["link"])
-    items=items[:limit]
+    items = items[:limit]
+    # thumbnails: og:image for items without one, all at once
+    missing = [i for i in items if not i.get("thumb") and i.get("link")]
+    if missing:
+        for (link, img, err), i in zip(run_parallel(_og_image, [m["link"] for m in missing], 4),
+                                       missing):
+            if err is None and img:
+                i["thumb"] = img
     _CACHE[url]=(etag,lm,items)
     return items
     

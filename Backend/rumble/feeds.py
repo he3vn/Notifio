@@ -1,7 +1,16 @@
-import html, json, re, subprocess, threading, time, urllib.request, urllib.error
+import html
+import json
+import re
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+
 import notifications
+from dexerto.feeds import _timestamp
+from net import run_parallel
 from storage import get_data_dir, read_json, write_json
-from dexerto.feeds import _ssl_context, _timestamp
 
 try:
     from curl_cffi import requests as cffi
@@ -22,6 +31,16 @@ CHANNEL_MARKERS = (
     "listing-header--content", "channel-header--img",
 )
 VIDEO_MARKER = '{"object_type":"video"'
+PAGE_TIMEOUT = 12
+CHANNEL_WORKERS = 6
+
+# Cloudflare at rumble.com 403s every Chrome-shaped fingerprint (and plain
+# urllib/curl), but Safari ones still walk straight through - so try those
+# first and keep the rest as fallback for when that changes.
+FINGERPRINTS = ("safari184", "safari180", "safari170", "chrome150", "safari17_0")
+
+_local = threading.local()   # one curl session per worker thread
+_broken = set()              # fingerprints this curl_cffi can't do
 
 
 def load_channels():
@@ -35,12 +54,39 @@ def _save_channels(chs):
         write_json(FILE, chs)
 
 
+def _session(target):
+    sessions = getattr(_local, "sessions", None)
+    if sessions is None:
+        sessions = _local.sessions = {}
+    s = sessions.get(target)
+    if s is None:
+        if target in _broken:
+            raise RuntimeError(f"unsupported impersonation target: {target}")
+        try:
+            s = cffi.Session(impersonate=target)
+        except Exception:
+            _broken.add(target)
+            raise
+        sessions[target] = s
+    return s
+
+
 def _impersonate(url):
-    r = cffi.get(url, impersonate="chrome", timeout=15,
-                 headers={"Accept-Language": "en-US,en;q=0.9"})
-    if r.status_code >= 400:
-        raise urllib.error.HTTPError(url, r.status_code, "blocked", None, None)
-    return r.text
+    if not cffi:
+        raise RuntimeError("curl_cffi unavailable")
+    last = None
+    for target in FINGERPRINTS:
+        try:
+            r = _session(target).get(url, timeout=PAGE_TIMEOUT, headers=HEADERS)
+        except Exception as e:
+            last = e
+            continue
+        if r.status_code < 400:
+            return r.text
+        last = urllib.error.HTTPError(url, r.status_code, "blocked", None, None)
+        if r.status_code not in (403, 429, 503):
+            raise last      # 404/410: the page really is gone, stop trying
+    raise last
 
 
 def _curl(url):
@@ -55,24 +101,31 @@ def _curl(url):
     return body
 
 
+_page_cache = {}   # path -> page html, also the stale fallback
+
+
 def _page(path):
     url = f"https://rumble.com/{path}"
     if cffi:
         try:
-            return _impersonate(url)
+            page = _impersonate(url)
+            _page_cache[path] = page
+            return page
         except urllib.error.HTTPError as e:
-            if e.code == 404:
+            if e.code in (404, 410):
                 raise
+            # blocked (403/429): fall through, maybe plain curl gets lucky
         except Exception:
             pass
-    req = urllib.request.Request(url, headers=HEADERS)
     try:
-        with urllib.request.urlopen(req, timeout=10, context=_ssl_context()) as r:
-            return r.read(3_000_000).decode("utf-8", "ignore")
-    except urllib.error.HTTPError as e:
-        if e.code != 403:
-            raise
-    return _curl(url)
+        page = _curl(url)
+        _page_cache[path] = page
+        return page
+    except Exception:
+        cached = _page_cache.get(path)
+        if cached:
+            return cached    # seen before: rather stale than broken
+        raise
 
 
 def parse_channel(text):
@@ -223,14 +276,21 @@ def fetch_rumble():
     channels = load_channels()
     if not channels:
         return []
-    items, failed, err = [], 0, None
-    for ch in channels:
-        try:
-            _, objs = _fetch_objs(ch["id"])
-            items += _items(objs, ch)
-        except Exception as e:
-            failed, err = failed + 1, e
-    if not items and failed:
-        raise RuntimeError(f"all channels failed: {err!r}")
+
+    def work(ch):
+        _, objs = _fetch_objs(ch["id"])
+        return _items(objs, ch)
+
+    items, failures = [], []
+    for ch, parsed, err in run_parallel(work, channels, CHANNEL_WORKERS):
+        if err is not None:
+            failures.append((ch.get("name") or ch.get("id"), err))
+            continue
+        items += parsed
+    for name, err in failures:
+        print(f"rumble: {name}: {err!r}", file=sys.stderr)
+    if failures and not items:
+        name, err = failures[0]
+        raise RuntimeError(f"all {len(failures)} channels failed ({name}): {err!r}")
     items.sort(key=lambda i: i["ts"], reverse=True)
     return items[:100]
